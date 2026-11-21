@@ -41,7 +41,7 @@ def test_window_starts_disarmed_and_can_preview_synthetic_jpeg(monkeypatch, tmp_
     app.withdraw()
     try:
         assert not app.gate.armed
-        assert app.arm_button["state"] == "disabled"
+        assert app.arm_button.instate(["disabled"])
         app.inbox.set(str(inbox))
         app.output.set(str(output))
         app._start()
