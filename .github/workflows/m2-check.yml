@@ -6,6 +6,7 @@ on:
       - 'app/m2_monitor.py'
       - 'app/windows_print.py'
       - 'tests/test_m2_monitor.py'
+      - 'tests/test_windows_print_contract.py'
       - 'tests/test_m1_processing.py'
       - 'app/m1_processing.py'
       - 'requirements-m1.txt'
@@ -16,6 +17,7 @@ on:
       - 'app/m2_monitor.py'
       - 'app/windows_print.py'
       - 'tests/test_m2_monitor.py'
+      - 'tests/test_windows_print_contract.py'
       - 'tests/test_m1_processing.py'
       - 'app/m1_processing.py'
       - 'requirements-m1.txt'
@@ -39,4 +41,22 @@ jobs:
       - name: Syntax check
         run: python -m compileall -q app
       - name: Unit tests (printer mocked, NO hardware)
-        run: python -m pytest -q tests/test_m1_processing.py tests/test_m2_monitor.py
+        run: python -m pytest -q tests/test_m1_processing.py tests/test_m2_monitor.py tests/test_windows_print_contract.py
+
+  windows-api-smoke:
+    needs: synthetic-checks
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install Windows dependencies
+        run: python -m pip install -r requirements-m2-windows.txt
+      - name: Check native pywin32 module imports
+        run: python -c "import win32print, win32gui, win32con; print('pywin32 import PASS')"
+      - name: Run M2 tests without physical printers
+        run: python -m pytest -q tests/test_m1_processing.py tests/test_m2_monitor.py tests/test_windows_print_contract.py
+      - name: CLI smoke check (does not print)
+        run: python app/m2_monitor.py --help
