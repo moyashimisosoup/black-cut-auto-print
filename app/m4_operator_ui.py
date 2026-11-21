@@ -442,6 +442,9 @@ class OperatorApp(tk.Tk):
         self.destroy()
 
     def _stop(self):
+        # A stopped monitor must not retain its unattended print permission.
+        # In-flight print submission cannot be recalled reliably.
+        self.gate.disarm()
         self.stop_event.set()
         self.stop_button.configure(state="disabled")
         self.status.set("安全停止中：現在の処理を終了しています")
@@ -486,6 +489,8 @@ class OperatorApp(tk.Tk):
                             self._log("トレイ操作：監視停止・自動印刷OFF。")
                     elif value == "exit":
                         self._close()
+                        if not self.winfo_exists():
+                            return
                     elif value == "tray_error":
                         self.tray_available = False
                         self._show_window()
