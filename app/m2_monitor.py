@@ -107,6 +107,16 @@ class ScanPipeline:
         self.rotate = rotate
         self.stop = stop or threading.Event()
 
+    def hold_unstable(self, source: Path) -> None:
+        """Persist timeout as HOLD instead of silently dropping the file."""
+        try:
+            fingerprint = source_fingerprint(source)
+            job = self.store.claim(fingerprint, source)
+            if job:
+                self.store.set(job, "HOLD", "STABILIZATION_TIMEOUT")
+        except OSError:
+            pass
+
     def run_one(self, source: Path) -> str:
         if source.is_symlink() or source.suffix.lower() not in EXTENSIONS:
             return "IGNORED"
@@ -197,8 +207,14 @@ class InboxMonitor:
             if now - first_seen > self.timeout_seconds:
                 self.known_names.add(key)
                 self.pending.pop(key, None)
-                # No print; signal that user must inspect the inbox manually.
+                self.pipeline.hold_unstable(entry)
                 outcomes.append((entry.name, "STABILIZATION_TIMEOUT_HOLD"))
+                continue
+            if st.st_size > MAX_SOURCE_BYTES:
+                self.known_names.add(key)
+                self.pending.pop(key, None)
+                self.pipeline.hold_unstable(entry)
+                outcomes.append((entry.name, "SOURCE_TOO_LARGE_HOLD"))
                 continue
             if st.st_size == 0 or now - stable_since < self.settle_seconds:
                 continue
@@ -260,6 +276,10 @@ def run_cli(argv: list[str] | None = None) -> int:
         p.error("--inbox and --output are required")
     if args.arm_printing and (not args.printer or os.name != "nt"):
         p.error("armed printing requires Windows and --printer EXACT queue name")
+    if args.arm_printing:
+        from windows_print import list_printers
+        if args.printer not in list_printers():
+            p.error("named printer not found in Windows printer queue list")
     if not 0.25 <= args.poll_seconds <= 10 or not 1 <= args.settle_seconds <= 30:
         p.error("invalid poll/settle settings")
     if args.source_dpi is not None and not 72 <= args.source_dpi <= 1200:
