@@ -103,3 +103,12 @@ def test_written_preview_has_no_print_side_effect(tmp_path):
     assert (folder / 'cleaned.png').exists()
     assert (folder / 'a4_preview.png').exists()
     assert (folder / 'report.json').exists()
+
+def test_existing_output_is_never_reused(tmp_path):
+    input_file = tmp_path / "sample.png"
+    Image.fromarray(make_scan()).save(input_file)
+    folder = tmp_path / "out"
+    assert process(input_file, folder).status == "ACCEPT"
+    import pytest
+    with pytest.raises(FileExistsError, match="OUTPUT_DIRECTORY_NOT_EMPTY"):
+        process(input_file, folder)
