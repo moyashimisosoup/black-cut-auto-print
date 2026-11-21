@@ -30,7 +30,7 @@ jobs:
       - name: Core M1, M2 and M4 print gate tests
         run: python -m pytest -q tests/test_m1_processing.py tests/test_m2_monitor.py tests/test_windows_print_contract.py tests/test_m4_print_gate.py
       - name: GUI synthetic scan smoke test (NO printer)
-        run: xvfb-run -a python -m pytest -q tests/test_m4_ui.py
+        run: xvfb-run -a python -m pytest -q tests/test_m4_ui.py tests/test_m4_simulated_workflow.py
 
   windows-build:
     needs: unit-and-gui-synthetic
