@@ -87,7 +87,7 @@ def submit_a4(image_path: Path, printer_name: str) -> int | None:
 
         # Create a document-specific device context; DO NOT change Windows
         # system defaults or queue-wide printer settings.
-        hdc = win32gui.CreateDC("WINSPOOL", printer_name, None, dm)
+        hdc = win32gui.CreateDC("WINSPOOL", printer_name, dm)
         started = False
         try:
             pw = win32print.GetDeviceCaps(hdc, win32con.PHYSICALWIDTH)
