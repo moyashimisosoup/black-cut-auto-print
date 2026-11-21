@@ -235,6 +235,7 @@ def run_cli(argv: list[str] | None = None) -> int:
     p.add_argument("--confirm-reviewed", action="store_true", help="I reviewed M1 previews and completed a manual hardware test")
     p.add_argument("--list-printers", action="store_true")
     p.add_argument("--manual-test-print", type=Path, help="Send existing A4 preview once. Does not monitor.")
+    p.add_argument("--confirm-test-sheet", action="store_true", help="I understand this command sends ONE physical print job")
     p.add_argument("--rotate", type=int, choices=(0, 90, 180, 270), default=0)
     p.add_argument("--source-dpi", type=float)
     p.add_argument("--poll-seconds", type=float, default=0.75)
@@ -249,8 +250,8 @@ def run_cli(argv: list[str] | None = None) -> int:
     if args.arm_printing and not args.confirm_reviewed:
         p.error("--arm-printing requires --confirm-reviewed (manual test and M1 review first)")
     if args.manual_test_print:
-        if not args.confirm_reviewed or not args.printer:
-            p.error("--manual-test-print requires --printer and --confirm-reviewed")
+        if args.arm_printing or not args.confirm_test_sheet or not args.printer:
+            p.error("--manual-test-print requires --printer and --confirm-test-sheet; do not combine --arm-printing")
         from windows_print import submit_a4
         print(json.dumps({"spool_id": submit_a4(args.manual_test_print, args.printer),
                           "status": "SUBMITTED_NOT_PAPER_VERIFIED"}))
