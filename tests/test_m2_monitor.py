@@ -148,6 +148,8 @@ def test_incomplete_jpeg_is_not_processed(monkeypatch, tmp_path):
     assert mon.poll_once(now=2) == []
     assert not called
     assert mon.poll_once(now=5) == [("partial.jpg", "STABILIZATION_TIMEOUT_HOLD")]
+    assert store.rows()[0]["state"] == "HOLD"
+    assert store.rows()[0]["message"] == "STABILIZATION_TIMEOUT"
     store.close()
 
 
@@ -169,4 +171,10 @@ def test_output_inbox_is_rejected(tmp_path):
 def test_cli_refuses_unreviewed_arming():
     with pytest.raises(SystemExit) as e:
         m2.run_cli(["--arm-printing", "--inbox", ".", "--output", "out"])
+    assert e.value.code == 2
+
+
+def test_manual_test_requires_separate_explicit_permission():
+    with pytest.raises(SystemExit) as e:
+        m2.run_cli(["--manual-test-print", "preview.png", "--printer", "Canon test"])
     assert e.value.code == 2
