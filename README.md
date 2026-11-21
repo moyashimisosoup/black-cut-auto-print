@@ -2,7 +2,7 @@
 
 Canon MF244dwからWindows PCに保存されたスキャン画像を監視し、原稿の外側の黒・暗灰背景を除去して、A4用紙へ自動印刷するための個人用Windows常駐ユーティリティ（開発準備段階）です。
 
-**APP-ID：APP-033** ｜ **現在：設計文書のみ・アプリ未実装** ｜ **作成元：[App Factory Issue #22](https://github.com/moyashimisosoup/app-factory/issues/22)**
+**APP-ID：APP-033** ｜ **現在：M1画像処理PoCを実装済み（実画像レビュー待ち）・無人印刷未実装** ｜ **作成元：[App Factory Issue #22](https://github.com/moyashimisosoup/app-factory/issues/22)**
 
 ## 実現したい操作
 
@@ -22,6 +22,16 @@ Canon MF244dwからWindows PCに保存されたスキャン画像を監視し、
 - 見開きは原則1枚として扱う。自動左右分割は将来機能。
 - 傾き・回転・原寸配置の条件は仕様書で定義し、未確定の尺度を保証しない。
 - 紙面検出の品質が不確実なら、**印刷せず保留**する。
+
+## M1画像処理PoC（試作済み、印刷OFF）
+
+- ソース：[app/m1_processing.py](app/m1_processing.py)
+- 実行手順：[docs/M1_USAGE.md](docs/M1_USAGE.md)
+- 合成入力テスト：[tests/test_m1_processing.py](tests/test_m1_processing.py)
+- 依存定義：[requirements-m1.txt](requirements-m1.txt)
+- 画像1枚を入力すると、候補紙面輪郭・保持マスク・外側白化画像・A4プレビューを保存します。
+- 2026-11-21にローカル環境で合成テスト7件成功。提供実スキャン1件でもプレビューを作成できました（目視検収は未実施）。
+- **スキャン監視、Windows印刷、常駐、EXEはまだありません。**
 
 ## 技術方針（設計段階）
 
@@ -46,7 +56,7 @@ Canon MF244dwからWindows PCに保存されたスキャン画像を監視し、
 - **M2：印刷パイプライン**：監視ON/OFF、保存完了待ち、状態管理、Windows印刷と安全な保留を接続。
 - **M3：常駐EXE**：最小UI・トレイ常駐・導入手順・実機での受入確認。
 
-現時点でコード・Windows EXE・GitHub Pages公開URLはありません。Webアプリ化より、無人印刷可能なローカル常駐アプリを優先します。
+現時点でM1の処理コードのみがあり、Windows EXE・無人印刷・GitHub Pages公開URLはありません。Webアプリ化より、無人印刷可能なローカル常駐アプリを優先します。
 
 ## 公開範囲
 
