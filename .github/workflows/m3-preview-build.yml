@@ -1,0 +1,44 @@
+name: M3 Windows preview-only exe
+
+on:
+  pull_request:
+    paths:
+      - 'app/m3_preview_ui.py'
+      - 'app/m2_monitor.py'
+      - 'app/m1_processing.py'
+      - 'requirements-m2-windows.txt'
+      - '.github/workflows/m3-preview-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preview-exe:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install image and Windows dependencies
+        run: python -m pip install -r requirements-m2-windows.txt "pyinstaller>=6.11,<7"
+      - name: Check entrypoint and win32 imports
+        run: python -c "import tkinter, cv2, win32print; print('imports PASS')"
+      - name: Compile and build preview-only exe
+        run: |
+          python -m compileall -q app
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name BlackCutPreview --paths app app/m3_preview_ui.py
+      - name: Confirm unsigned exe exists (do not execute or print)
+        shell: pwsh
+        run: |
+          if (!(Test-Path 'dist/BlackCutPreview.exe')) { throw 'EXE missing' }
+          Get-Item 'dist/BlackCutPreview.exe' | Select-Object Name,Length
+          Get-FileHash 'dist/BlackCutPreview.exe' -Algorithm SHA256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: APP033-BlackCutPreview-Windows-unsigned
+          path: dist/BlackCutPreview.exe
+          if-no-files-found: error
+          retention-days: 7
