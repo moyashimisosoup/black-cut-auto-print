@@ -2,7 +2,7 @@
 
 Canon MF244dwからWindows PCに保存されたスキャン画像を監視し、原稿の外側の黒・暗灰背景を除去して、A4用紙へ自動印刷するための個人用Windows自動処理ユーティリティ（試作・実機未検収）です。
 
-**APP-ID：APP-033** ｜ **現在：M1 main保存／M2 [Draft PR #1](https://github.com/moyashimisosoup/black-cut-auto-print/pull/1)／M3 [Draft PR #2](https://github.com/moyashimisosoup/black-cut-auto-print/pull/2)／M4 [Draft PR #3](https://github.com/moyashimisosoup/black-cut-auto-print/pull/3)で自動印刷対応UI実装（実機未検収）** ｜ **作成元：[App Factory Issue #22](https://github.com/moyashimisosoup/app-factory/issues/22)**
+**APP-ID：APP-033** ｜ **現在：M1 main保存／M2 [Draft PR #1](https://github.com/moyashimisosoup/black-cut-auto-print/pull/1)／M3 [Draft PR #2](https://github.com/moyashimisosoup/black-cut-auto-print/pull/2)／M4 [Draft PR #3](https://github.com/moyashimisosoup/black-cut-auto-print/pull/3)／M5 [Draft PR #4](https://github.com/moyashimisosoup/black-cut-auto-print/pull/4)でトレイ常駐を試作（実機未検収）** ｜ **作成元：[App Factory Issue #22](https://github.com/moyashimisosoup/app-factory/issues/22)**
 
 ## 実現したい操作
 
@@ -32,6 +32,14 @@ Canon MF244dwからWindows PCに保存されたスキャン画像を監視し、
 - 画像1枚を入力すると、候補紙面輪郭・保持マスク・外側白化画像・A4プレビューを保存します。
 - 2026-11-21にローカル環境で合成テスト8件成功。提供実スキャン1件でもプレビューを作成できました（目視検収は未実施）。
 - **M1単体は画像処理のみです。** 受信監視・Windows印刷API・GUI/EXEの後続実装はM2〜M4のDraft PRにあります。
+
+## M5｜Windowsトレイ常駐（Draft PR #4）
+
+- [トレイ処理](app/m5_tray.py)を追加。Windows通知領域にモノクロアイコンを置き、ウィンドウの最小化から復帰、監視停止、アプリ終了を操作可能。
+- [トレイ利用手順](docs/M5_TRAY_SETUP.md)、[単体テスト](tests/test_m5_tray.py)、[仮想GUI試験](tests/test_m5_gui_tray.py)を用意。
+- トレイの別スレッドからTkやプリンターを直接操作しない。GUIのイベントキュー経由で指示し、停止時には無人印刷の許可を解除する。
+- 起動時は監視OFF・自動印刷OFFを維持。トレイが利用できないPCでは通常のウィンドウから監視・停止できる。
+- [M5 GitHub Actions](https://github.com/moyashimisosoup/black-cut-auto-print/actions/workflows/m5-tray-build.yml)でLinux/Xvfbの**47件PASS（単体42件・GUI5件）**を確認。Windows用評価EXEの検証結果は別途記録する。
 
 ## M4｜印刷対応オペレーター画面（Draft PR #3・実機未検収）
 
@@ -81,9 +89,10 @@ Canon MF244dwからWindows PCに保存されたスキャン画像を監視し、
 - **M1：画像処理PoC**：実原稿をローカルで用い、紙面境界・外側白化・A4プレビューを作り品質を検証。印刷はOFF。
 - **M2：印刷パイプライン**：監視ON/OFF、保存完了待ち、状態管理、Windows印刷と安全な保留を接続。
 - **M3：プレビュー専用GUI**：印刷OFFで受信と加工結果を確認。
-- **M4：自動印刷対応GUI**：手動試し刷り・実紙確認・明示ON/OFF、安全な履歴を実装。トレイ常駐は別途検討。
+- **M4：自動印刷対応GUI**：手動試し刷り・実紙確認・明示ON/OFF、安全な履歴を実装。
+- **M5：タスクトレイ常駐**：最小化中も監視を維持。トレイから復帰・停止・終了を操作。
 
-現時点でM1はmain、M2はDraft PR #1、M3プレビューGUIはDraft PR #2、M4の自動印刷対応画面はDraft PR #3です。タスクトレイ常駐・Canon実機検収・正式公開は未実施。Webアプリ化より、無人印刷可能なローカル常駐アプリを優先します。
+現時点でM1はmain、M2はDraft PR #1、M3はDraft PR #2、M4はDraft PR #3、M5のタスクトレイ常駐はDraft PR #4です。Canon実機検収・正式公開は未実施。Webアプリ化より、無人印刷可能なローカル常駐アプリを優先します。
 
 ## 公開範囲
 
