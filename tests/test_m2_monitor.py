@@ -185,3 +185,16 @@ def test_physical_page_check_rejects_a3_even_same_aspect():
     assert _physical_a4(3508, 2480, 300, 300)
     assert not _physical_a4(3508, 4961, 300, 300)
     assert not _physical_a4(2480, 3508, 600, 600)
+
+
+def test_single_instance_guard_prevents_double_monitor(tmp_path):
+    guard_path = tmp_path / "results" / ".monitor.lock"
+    first = m2.SingleInstance(guard_path)
+    try:
+        with pytest.raises(RuntimeError, match="MONITOR_ALREADY_RUNNING"):
+            m2.SingleInstance(guard_path)
+    finally:
+        first.close()
+    # OS lock is automatically released after normal shutdown.
+    second = m2.SingleInstance(guard_path)
+    second.close()
