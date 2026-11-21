@@ -1,0 +1,42 @@
+name: M2 pipeline checks (no real printing)
+
+on:
+  push:
+    paths:
+      - 'app/m2_monitor.py'
+      - 'app/windows_print.py'
+      - 'tests/test_m2_monitor.py'
+      - 'tests/test_m1_processing.py'
+      - 'app/m1_processing.py'
+      - 'requirements-m1.txt'
+      - 'requirements-m2-windows.txt'
+      - '.github/workflows/m2-check.yml'
+  pull_request:
+    paths:
+      - 'app/m2_monitor.py'
+      - 'app/windows_print.py'
+      - 'tests/test_m2_monitor.py'
+      - 'tests/test_m1_processing.py'
+      - 'app/m1_processing.py'
+      - 'requirements-m1.txt'
+      - 'requirements-m2-windows.txt'
+      - '.github/workflows/m2-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install image dependencies
+        run: python -m pip install -r requirements-m1.txt
+      - name: Syntax check
+        run: python -m compileall -q app
+      - name: Unit tests (printer mocked, NO hardware)
+        run: python -m pytest -q tests/test_m1_processing.py tests/test_m2_monitor.py
