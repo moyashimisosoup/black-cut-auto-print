@@ -1,0 +1,30 @@
+name: M1 image processing checks
+
+on:
+  push:
+    paths:
+      - 'app/m1_processing.py'
+      - 'tests/test_m1_processing.py'
+      - 'requirements-m1.txt'
+      - '.github/workflows/m1-check.yml'
+  pull_request:
+    paths:
+      - 'app/m1_processing.py'
+      - 'tests/test_m1_processing.py'
+      - 'requirements-m1.txt'
+      - '.github/workflows/m1-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r requirements-m1.txt
+      - run: python -m pytest -q tests/test_m1_processing.py
