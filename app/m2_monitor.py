@@ -86,6 +86,43 @@ class JobStore:
         self.connection.close()
 
 
+class SingleInstance:
+    """OS advisory file lock prevents two monitor processes sharing state."""
+
+    def __init__(self, path: Path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self.handle = open(path, "a+b")
+        try:
+            self.handle.seek(0, os.SEEK_END)
+            if self.handle.tell() == 0:
+                self.handle.write(b"0")
+                self.handle.flush()
+            self.handle.seek(0)
+            if os.name == "nt":
+                import msvcrt
+                msvcrt.locking(self.handle.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(self.handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as exc:
+            self.handle.close()
+            raise RuntimeError("MONITOR_ALREADY_RUNNING") from exc
+
+    def close(self) -> None:
+        if self.handle.closed:
+            return
+        self.handle.seek(0)
+        try:
+            if os.name == "nt":
+                import msvcrt
+                msvcrt.locking(self.handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(self.handle.fileno(), fcntl.LOCK_UN)
+        finally:
+            self.handle.close()
+
+
 def source_fingerprint(path: Path) -> str:
     st = path.stat()
     payload = f"{path.resolve()}\0{st.st_size}\0{st.st_mtime_ns}\0{st.st_ctime_ns}"
@@ -297,7 +334,12 @@ def run_cli(argv: list[str] | None = None) -> int:
     if hasattr(signal, "SIGTERM"):
         signal.signal(signal.SIGTERM, _stop)
     from windows_print import submit_a4
-    store = JobStore(output / "jobs.sqlite3")
+    instance_lock = SingleInstance(output / ".monitor.lock")
+    try:
+        store = JobStore(output / "jobs.sqlite3")
+    except BaseException:
+        instance_lock.close()
+        raise
     try:
         sender = submit_a4 if args.arm_printing else None
         pipeline = ScanPipeline(store, output, printer=args.printer,
@@ -314,6 +356,7 @@ def run_cli(argv: list[str] | None = None) -> int:
         return 0
     finally:
         store.close()
+        instance_lock.close()
 
 
 if __name__ == "__main__":
