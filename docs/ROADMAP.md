@@ -30,7 +30,15 @@ APP-033／2026-11-21 JST 時点。正式設計の正本は [詳細仕様書v0.3]
 - [x] Windows GDIでA4・白黒・片面・1部を要求する処理を実装（**実機は未検証**）。
 - [x] スプーラー受付/排紙完了の区別、UNKNOWN/HOLD・再送禁止を実装・モック試験。
 - [ ] Windows実機で手動試し刷り、3回連続スキャン、自動送信、OFF/オフライン/重複印刷防止を確認。
-- [x] [GitHub Actions CI成功](https://github.com/moyashimisosoup/black-cut-auto-print/actions/runs/44902333101)を確認。ローカル合成23テストPASS・実画像1件のドライラン成功は別途記録済み。
+- [x] [GitHub Actions CI成功](https://github.com/moyashimisosoup/black-cut-auto-print/actions/runs/44902333101)を確認。ローカル合成26テストPASS・実画像1件のドライラン成功は別途記録済み。
+
+## M3：確認用GUIとEXEビルド（Draft PR #2／実機未検収）
+
+- [x] Tkinterのプレビュー専用GUIを追加。監視ON/OFF、受信/保存先設定、回転、履歴、直近プレビューを表示。
+- [x] Linux仮想GUIで合成JPEGを監視開始後に受信し、A4プレビュー生成→停止まで確認（印刷OFF）。
+- [x] [Windows EXEビルド](https://github.com/moyashimisosoup/black-cut-auto-print/actions/runs/44902861132)成功。Artifactsに未署名の確認用EXEを保存（7日保持）。
+- [ ] 利用者Windows 11実機でexe起動・フォルダ設定・3連続スキャン・A4画像の確認。
+- [ ] M2の実紙印刷検収後、プレビュー用から最終的な常駐・印刷ON/OFFのUIへ発展。
 
 ## M3：常駐EXE・運用
 - [ ] 最小UI「監視開始/停止」「印刷履歴」「保留確認」「設定」。
@@ -44,4 +52,4 @@ APP-033／2026-11-21 JST 時点。正式設計の正本は [詳細仕様書v0.3]
 3. 実スキャン画像はPublic Repoへ追加しない。合成画像のみ共有可能。
 4. ユーザーの使用感に基づいて設定を増やす。自動分割・OCR・複雑な編集画面は後回し。
 
-次の1操作：M1プレビューのユーザー目視確認後、WindowsでM2ドライラン→1枚だけ手動試し刷り。合格まで無人印刷はONにしない。
+次の1操作：M3確認用EXEをユーザーWindows PCで起動し、監視ON→新規スキャン→A4プレビュー→OFFを確認。その後、M1画質検収とM2手動1枚印刷に進む。
