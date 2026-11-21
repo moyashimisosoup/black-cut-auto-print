@@ -6,6 +6,7 @@ on:
       - 'app/**'
       - 'tests/**'
       - 'requirements-m5-windows.txt'
+      - 'packaging/**'
       - '.github/workflows/m5-tray-build.yml'
   workflow_dispatch:
 
@@ -58,9 +59,22 @@ jobs:
           if (!(Test-Path 'dist/BlackCutPrintTrayCandidate.exe')) { throw 'EXE missing' }
           Get-Item 'dist/BlackCutPrintTrayCandidate.exe' | Select-Object Name,Length
           Get-FileHash 'dist/BlackCutPrintTrayCandidate.exe' -Algorithm SHA256
+      - name: Assemble verified Windows update package
+        shell: pwsh
+        run: |
+          New-Item -Path 'dist/update_package' -ItemType Directory -Force | Out-Null
+          Copy-Item 'dist/BlackCutPrintTrayCandidate.exe' 'dist/update_package/BlackCutPrintTrayCandidate.exe'
+          Copy-Item 'packaging/apply_update.bat' 'dist/update_package/apply_update.bat'
+          Copy-Item 'packaging/apply_update.ps1' 'dist/update_package/apply_update.ps1'
+          Copy-Item 'packaging/UPDATE_README.txt' 'dist/update_package/UPDATE_README.txt'
+          (Get-FileHash 'dist/update_package/BlackCutPrintTrayCandidate.exe' -Algorithm SHA256).Hash.ToLowerInvariant() |
+            Set-Content -Path 'dist/update_package/new_exe_sha256.txt' -Encoding ascii -NoNewline
+          powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "dist/update_package/apply_update.ps1" -CheckPackageOnly
+          if ($LASTEXITCODE -ne 0) { throw 'SHA256 manifest package verification failed' }
+          Get-ChildItem 'dist/update_package' | Select-Object Name, Length
       - uses: actions/upload-artifact@v4
         with:
-          name: APP033-M5-Windows-tray-evaluation
-          path: dist/BlackCutPrintTrayCandidate.exe
+          name: APP033-M5-PathFix-UpdatePackage
+          path: dist/update_package/
           if-no-files-found: error
           retention-days: 7
