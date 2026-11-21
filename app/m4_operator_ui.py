@@ -17,6 +17,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from m2_monitor import InboxMonitor, JobStore, ScanPipeline, SingleInstance, _paths_safe
 from m4_print_gate import GateError, PrintGate
+from m5_tray import TrayController
 
 
 def preview_history(output: Path, limit: int = 75) -> list[dict]:
@@ -59,6 +60,14 @@ class OperatorApp(tk.Tk):
         self._load_settings()
         self._draw()
         self.printer.trace_add("write", self._printer_changed)
+        # Starts hidden tray companion, but never starts scan monitoring
+        # or restores any print authorization.
+        self.tray = TrayController(self._tray_command)
+        self.tray_available = self.tray.start()
+        if self.tray_available:
+            self.bind("<Unmap>", self._minimize_to_tray)
+        elif os.name == "nt":
+            self._log("トレイ機能を起動できません。画面の監視・停止は利用できます。")
         self.after(200, self._events)
         self.protocol("WM_DELETE_WINDOW", self._close)
 
@@ -409,6 +418,29 @@ class OperatorApp(tk.Tk):
                 lock.close()
             self.notifications.put(("stopped", None))
 
+    def _tray_command(self, command: str) -> None:
+        # pystray callbacks run on another thread: Tk must only be
+        # touched in the main loop's _events() handler.
+        self.notifications.put(("tray_command", command))
+
+    def _minimize_to_tray(self, event) -> None:
+        if event.widget is self and not self.pending_exit and self.tray_available:
+            self.after_idle(self._hide_if_iconic)
+
+    def _hide_if_iconic(self) -> None:
+        if (not self.pending_exit and self.tray_available and
+                self.tray.error is None and self.state() == "iconic"):
+            self.withdraw()
+
+    def _show_window(self) -> None:
+        self.deiconify()
+        self.state("normal")
+        self.lift()
+
+    def _finish_exit(self) -> None:
+        self.tray.stop()
+        self.destroy()
+
     def _stop(self):
         self.stop_event.set()
         self.stop_button.configure(state="disabled")
@@ -443,12 +475,27 @@ class OperatorApp(tk.Tk):
                 elif typ == "manual_error":
                     self.gate.manual_failed()
                     self._log("送信結果が不明。自動再送は禁止：" + str(value))
+                elif typ == "tray_command":
+                    if value == "show":
+                        self._show_window()
+                    elif value == "stop":
+                        if self.worker and self.worker.is_alive():
+                            self._stop()
+                        else:
+                            self.gate.disarm()
+                            self._log("トレイ操作：監視停止・自動印刷OFF。")
+                    elif value == "exit":
+                        self._close()
+                    elif value == "tray_error":
+                        self.tray_available = False
+                        self._show_window()
+                        self._log("トレイの動作に問題が発生しました。画面を再表示しました。")
                 self._sync_gate_controls()
         except queue.Empty:
             pass
         if self.pending_exit and not (self.worker and self.worker.is_alive()) \
                 and not (self.manual_worker and self.manual_worker.is_alive()):
-            self.destroy()
+            self._finish_exit()
             return
         self.after(200, self._events)
 
@@ -458,7 +505,7 @@ class OperatorApp(tk.Tk):
         self.stop_event.set()
         if not (self.worker and self.worker.is_alive()) \
                 and not (self.manual_worker and self.manual_worker.is_alive()):
-            self.destroy()
+            self._finish_exit()
         else:
             self.status.set("終了処理中：ジョブの再送信はしません")
 
