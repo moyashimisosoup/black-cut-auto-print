@@ -73,3 +73,28 @@ def test_window_starts_disarmed_and_can_preview_synthetic_jpeg(monkeypatch, tmp_
             app.update()
         except Exception:
             pass
+
+
+def test_gui_accepts_output_parent_but_rejects_output_within_inbox(monkeypatch, tmp_path):
+    """Regression: user's D:\ScanInbox + D:\ layout is valid (nonrecursive watcher)."""
+    monkeypatch.setenv("APPDATA", str(tmp_path / "config"))
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    app = OperatorApp()
+    app.withdraw()
+    try:
+        app.inbox.set(str(inbox))
+        app.output.set(str(tmp_path))
+        selected_inbox, selected_output = app._validated_paths()
+        assert selected_inbox == inbox.resolve()
+        assert selected_output == tmp_path.resolve()
+        app.output.set(str(inbox / "processed"))
+        import pytest
+        with pytest.raises(ValueError, match="結果フォルダ"):
+            app._validated_paths()
+    finally:
+        app._close()
+        try:
+            app.update()
+        except Exception:
+            pass
