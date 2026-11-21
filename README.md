@@ -39,7 +39,8 @@ Canon MF244dwからWindows PCに保存されたスキャン画像を監視し、
 - [トレイ利用手順](docs/M5_TRAY_SETUP.md)、[単体テスト](tests/test_m5_tray.py)、[仮想GUI試験](tests/test_m5_gui_tray.py)を用意。
 - トレイの別スレッドからTkやプリンターを直接操作しない。GUIのイベントキュー経由で指示し、停止時には無人印刷の許可を解除する。
 - 起動時は監視OFF・自動印刷OFFを維持。トレイが利用できないPCでは通常のウィンドウから監視・停止できる。
-- [M5 GitHub Actions](https://github.com/moyashimisosoup/black-cut-auto-print/actions/workflows/m5-tray-build.yml)でLinux/Xvfbの**47件PASS（単体42件・GUI5件）**を確認。Windows用評価EXEの検証結果は別途記録する。
+- [M5 CHECKPOINT](docs/checkpoints/APP033_M5_TRAY_20261122.md)：8工程中6工程、工程ベース**75%**。**実紙印刷0件・正式版未確定**。
+- [M5 GitHub Actions](https://github.com/moyashimisosoup/black-cut-auto-print/actions/workflows/m5-tray-build.yml)でLinux/Xvfbの**47件PASS（単体42件・GUI5件）**を確認。[Windows/Linux CI #44928835667](https://github.com/moyashimisosoup/black-cut-auto-print/actions/runs/44928835667)成功。Windows単体42件PASS、未署名のトレイ対応EXEを生成しZIP整合性を確認済み。
 
 ## M4｜印刷対応オペレーター画面（Draft PR #3・実機未検収）
 
