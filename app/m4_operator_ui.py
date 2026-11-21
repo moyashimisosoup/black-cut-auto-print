@@ -489,7 +489,10 @@ class OperatorApp(tk.Tk):
                             self._log("トレイ操作：監視停止・自動印刷OFF。")
                     elif value == "exit":
                         self._close()
-                        if not self.winfo_exists():
+                        # The Tk interpreter can already be destroyed here.
+                        # Do not call any Tk method after synchronous exit.
+                        if not ((self.worker and self.worker.is_alive()) or
+                                (self.manual_worker and self.manual_worker.is_alive())):
                             return
                     elif value == "tray_error":
                         self.tray_available = False
