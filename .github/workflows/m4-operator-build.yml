@@ -1,0 +1,63 @@
+name: M4 Windows operator candidate (no hardware printing)
+
+on:
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'tests/**'
+      - 'requirements-m1.txt'
+      - 'requirements-m2-windows.txt'
+      - '.github/workflows/m4-operator-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unit-and-gui-synthetic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install dependencies and virtual display
+        run: |
+          python -m pip install -r requirements-m1.txt
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb
+      - name: Core M1, M2 and M4 print gate tests
+        run: python -m pytest -q tests/test_m1_processing.py tests/test_m2_monitor.py tests/test_windows_print_contract.py tests/test_m4_print_gate.py
+      - name: GUI synthetic scan smoke test (NO printer)
+        run: xvfb-run -a python -m pytest -q tests/test_m4_ui.py
+
+  windows-build:
+    needs: unit-and-gui-synthetic
+    runs-on: windows-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install Windows dependencies
+        run: python -m pip install -r requirements-m2-windows.txt "pyinstaller>=6.11,<7"
+      - name: Syntax, pywin32 and gate tests
+        run: |
+          python -m compileall -q app
+          python -c "import tkinter, win32print, win32gui, win32con; print('Windows imports OK')"
+          python -m pytest -q tests/test_m1_processing.py tests/test_m2_monitor.py tests/test_windows_print_contract.py tests/test_m4_print_gate.py
+      - name: Package unsigned evaluation EXE (DO NOT RUN OR PRINT)
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name BlackCutPrintCandidate --paths app app/m4_operator_ui.py
+      - name: Verify PE build exists
+        shell: pwsh
+        run: |
+          if (!(Test-Path 'dist/BlackCutPrintCandidate.exe')) { throw 'EXE missing' }
+          Get-FileHash 'dist/BlackCutPrintCandidate.exe' -Algorithm SHA256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: APP033-M4-Windows-unsigned-evaluation
+          path: dist/BlackCutPrintCandidate.exe
+          if-no-files-found: error
+          retention-days: 7
