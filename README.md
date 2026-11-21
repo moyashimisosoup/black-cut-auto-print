@@ -2,7 +2,7 @@
 
 Canon MF244dwからWindows PCに保存されたスキャン画像を監視し、原稿の外側の黒・暗灰背景を除去して、A4用紙へ自動印刷するための個人用Windows常駐ユーティリティ（開発準備段階）です。
 
-**APP-ID：APP-033** ｜ **現在：M1画像処理PoCを実装済み（実画像レビュー待ち）・無人印刷未実装** ｜ **作成元：[App Factory Issue #22](https://github.com/moyashimisosoup/app-factory/issues/22)**
+**APP-ID：APP-033** ｜ **現在：M1はmain保存、M2監視・印刷パイプラインは[Draft PR #1](https://github.com/moyashimisosoup/black-cut-auto-print/pull/1)で試験実装済み（Windows実機検収待ち）** ｜ **作成元：[App Factory Issue #22](https://github.com/moyashimisosoup/app-factory/issues/22)**
 
 ## 実現したい操作
 
@@ -33,6 +33,15 @@ Canon MF244dwからWindows PCに保存されたスキャン画像を監視し、
 - 2026-11-21にローカル環境で合成テスト8件成功。提供実スキャン1件でもプレビューを作成できました（目視検収は未実施）。
 - **スキャン監視、Windows印刷、常駐、EXEはまだありません。**
 
+## M2監視・Windows印刷パイプライン（Draft PR・未統合）
+
+- [監視・ジョブ状態管理](app/m2_monitor.py)：新着JPEGを検知、M1でA4加工、SQLiteで二重送信を抑止。
+- [Windows印刷アダプター](app/windows_print.py)：正確なプリンターキューにA4・片面・白黒・1部を要求。物理寸法・向き・オフラインを検査。
+- [M2使い方](docs/M2_SETUP.md)：初期設定、ドライラン、明示的な手動試し刷り、自動印刷ONの順。
+- [M2 CHECKPOINT](docs/checkpoints/APP033_M2_DRAFT_20261121.md)。
+- LinuxローカルのM1+M2合成テスト22件PASS、提供実スキャン1件で監視→A4プレビュー生成→再起動後の重複なしを確認（印刷命令は送っていない）。
+- **GitHub Actions CI成功・Windows実機印刷・ユーザーの原稿目視検収は未確認。** Draft PRをmainに統合しない。
+
 ## 技術方針（設計段階）
 
 - Windows 11、Canon MF244dw、MF Scan Utility
@@ -56,7 +65,7 @@ Canon MF244dwからWindows PCに保存されたスキャン画像を監視し、
 - **M2：印刷パイプライン**：監視ON/OFF、保存完了待ち、状態管理、Windows印刷と安全な保留を接続。
 - **M3：常駐EXE**：最小UI・トレイ常駐・導入手順・実機での受入確認。
 
-現時点でM1の処理コードのみがあり、Windows EXE・無人印刷・GitHub Pages公開URLはありません。Webアプリ化より、無人印刷可能なローカル常駐アプリを優先します。
+現時点でM1コードはmainにあり、M2の監視・無人印刷コードはDraft PRで未統合です。Windows EXE・タスクトレイ・GitHub Pages公開URLはありません。Webアプリ化より、無人印刷可能なローカル常駐アプリを優先します。
 
 ## 公開範囲
 
