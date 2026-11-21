@@ -160,12 +160,22 @@ def test_a4_dimensions_and_invalid_layout():
     assert not _check_a4(320, 440)
 
 
-def test_output_inbox_is_rejected(tmp_path):
+def test_output_path_can_be_parent_or_sibling_but_not_inside_inbox(tmp_path):
     inbox = tmp_path / "inbox"
     inbox.mkdir()
+    # Same structure as D:\\ScanInbox + D:\\ from Windows screenshot.
+    assert m2._paths_safe(inbox, tmp_path)
+    assert m2._paths_safe(inbox, tmp_path / "processed")
+    assert m2._paths_safe(inbox, tmp_path.parent)
     assert not m2._paths_safe(inbox, inbox)
     assert not m2._paths_safe(inbox, inbox / "output")
-    assert not m2._paths_safe(inbox, tmp_path)
+
+
+def test_path_aliases_cannot_bypass_inbox_safety(tmp_path):
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    assert not m2._paths_safe(inbox, inbox / ".." / "inbox" / "output")
+    assert m2._paths_safe(inbox, inbox / ".." / "processed")
 
 
 def test_cli_refuses_unreviewed_arming():
