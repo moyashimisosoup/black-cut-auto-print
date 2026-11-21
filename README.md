@@ -1,8 +1,8 @@
 # 黒部分カット自動印刷機（Black Cut Auto Print）
 
-Canon MF244dwからWindows PCに保存されたスキャン画像を監視し、原稿の外側の黒・暗灰背景を除去して、A4用紙へ自動印刷するための個人用Windows常駐ユーティリティ（開発準備段階）です。
+Canon MF244dwからWindows PCに保存されたスキャン画像を監視し、原稿の外側の黒・暗灰背景を除去して、A4用紙へ自動印刷するための個人用Windows自動処理ユーティリティ（試作・実機未検収）です。
 
-**APP-ID：APP-033** ｜ **現在：M1 main保存／M2 [Draft PR #1](https://github.com/moyashimisosoup/black-cut-auto-print/pull/1)でWindows CI合格／M3 [Draft PR #2](https://github.com/moyashimisosoup/black-cut-auto-print/pull/2)でプレビュー専用GUI・EXEビルド成功（実機検収待ち）** ｜ **作成元：[App Factory Issue #22](https://github.com/moyashimisosoup/app-factory/issues/22)**
+**APP-ID：APP-033** ｜ **現在：M1 main保存／M2 [Draft PR #1](https://github.com/moyashimisosoup/black-cut-auto-print/pull/1)／M3 [Draft PR #2](https://github.com/moyashimisosoup/black-cut-auto-print/pull/2)／M4 [Draft PR #3](https://github.com/moyashimisosoup/black-cut-auto-print/pull/3)で自動印刷対応UI実装（実機未検収）** ｜ **作成元：[App Factory Issue #22](https://github.com/moyashimisosoup/app-factory/issues/22)**
 
 ## 実現したい操作
 
@@ -12,7 +12,7 @@ Canon MF244dwからWindows PCに保存されたスキャン画像を監視し、
 4. 本アプリが新規受信を検知し、紙面を見つけ、紙面**外側だけ**を白くする。
 5. A4・片面・白黒・1部の印刷ジョブをWindowsドライバー経由で送信する。
 
-スキャン開始後のPC操作を不要にすることを目指します。Canon純正のスキャン保存経路は既存の動作確認済みですが、アプリによる画像加工・自動印刷・実機試験は**まだ実施していません**。
+スキャン開始後のPC操作を不要にすることを目指します。Canon純正のスキャン保存は利用者が確認済みです。M1では提供画像1例の画像処理、M2では模擬受信を確認しています。**Canon実機への自動印刷・排紙確認は未実施**です。
 
 ## 画像処理の必須条件
 
@@ -31,7 +31,15 @@ Canon MF244dwからWindows PCに保存されたスキャン画像を監視し、
 - 依存定義：[requirements-m1.txt](requirements-m1.txt)
 - 画像1枚を入力すると、候補紙面輪郭・保持マスク・外側白化画像・A4プレビューを保存します。
 - 2026-11-21にローカル環境で合成テスト8件成功。提供実スキャン1件でもプレビューを作成できました（目視検収は未実施）。
-- **スキャン監視、Windows印刷、常駐、EXEはまだありません。**
+- **M1単体は画像処理のみです。** 受信監視・Windows印刷API・GUI/EXEの後続実装はM2〜M4のDraft PRにあります。
+
+## M4｜印刷対応オペレーター画面（Draft PR #3・実機未検収）
+
+- [操作画面](app/m4_operator_ui.py)：受信フォルダ、印刷先選択、回転・DPI設定、監視ON/OFF、ジョブ履歴、A4プレビュー、1枚の手動試し刷り、自動印刷許可・停止。
+- [印刷許可ゲート](app/m4_print_gate.py)：起動時は必ずOFF。**試し刷りの紙を本人が確認したことを、その起動中だけ記録**し、さらに別の確認操作後に自動印刷ONを許可。再起動・プリンター変更で失効。
+- [M4操作ガイド](docs/M4_OPERATOR_GUIDE.md)と[合成テスト](tests/test_m4_print_gate.py)を追加。Tkinterを仮想ディスプレイで起動するGUI試験、モックの手動試し刷り→自動印刷送信試験を追加。
+- [M4 CI](https://github.com/moyashimisosoup/black-cut-auto-print/actions/workflows/m4-operator-build.yml)：Linuxの単体38件＋GUI3件が成功。Windows CI・EXEは実行結果を確認してから更新。
+- **自動印刷の実機試験・排紙検収は行っていません。** Draft PRはmainへ統合しません。
 
 ## M3｜プレビュー専用GUI（印刷OFF固定・開発用）
 
@@ -53,8 +61,8 @@ Canon MF244dwからWindows PCに保存されたスキャン画像を監視し、
 ## 技術方針（設計段階）
 
 - Windows 11、Canon MF244dw、MF Scan Utility
-- Python 3.13（候補）、OpenCV、Pillow、watchdog、pywin32、PyInstaller
-- ローカルの専用受信フォルダをイベント監視。保存完了確認後に処理。
+- Python 3.13、OpenCV、Pillow、pywin32、PyInstaller。watchdogは検討のみで現時点では未採用
+- ローカルの専用受信フォルダを非再帰ポーリング監視（約0.8秒間隔）。JPEG安定・検証後に処理。
 - ジョブ状態を永続化し、監視切替・再起動・印刷失敗による二重送信を防ぐ。
 - オフライン完結を基本とし、認証情報やスキャン本文を外部送信しない。
 - Windows印刷スプーラーが受け付けたことと、用紙が正常に排出されたことは区別する。
@@ -71,9 +79,10 @@ Canon MF244dwからWindows PCに保存されたスキャン画像を監視し、
 
 - **M1：画像処理PoC**：実原稿をローカルで用い、紙面境界・外側白化・A4プレビューを作り品質を検証。印刷はOFF。
 - **M2：印刷パイプライン**：監視ON/OFF、保存完了待ち、状態管理、Windows印刷と安全な保留を接続。
-- **M3：常駐EXE**：最小UI・トレイ常駐・導入手順・実機での受入確認。
+- **M3：プレビュー専用GUI**：印刷OFFで受信と加工結果を確認。
+- **M4：自動印刷対応GUI**：手動試し刷り・実紙確認・明示ON/OFF、安全な履歴を実装。トレイ常駐は別途検討。
 
-現時点でM1はmain、M2はDraft PR #1、M3プレビューGUI/署名なしEXEはDraft PR #2にあります。タスクトレイ常駐・実機検収・GitHub Pages公開は未実施。Webアプリ化より、無人印刷可能なローカル常駐アプリを優先します。
+現時点でM1はmain、M2はDraft PR #1、M3プレビューGUIはDraft PR #2、M4の自動印刷対応画面はDraft PR #3です。タスクトレイ常駐・Canon実機検収・正式公開は未実施。Webアプリ化より、無人印刷可能なローカル常駐アプリを優先します。
 
 ## 公開範囲
 
