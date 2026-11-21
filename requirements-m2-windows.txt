@@ -1,0 +1,3 @@
+# Windows 11 M2 dependencies. No background service installed.
+-r requirements-m1.txt
+pywin32>=311,<400
