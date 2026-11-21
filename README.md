@@ -38,7 +38,8 @@ Canon MF244dwからWindows PCに保存されたスキャン画像を監視し、
 - [操作画面](app/m4_operator_ui.py)：受信フォルダ、印刷先選択、回転・DPI設定、監視ON/OFF、ジョブ履歴、A4プレビュー、1枚の手動試し刷り、自動印刷許可・停止。
 - [印刷許可ゲート](app/m4_print_gate.py)：起動時は必ずOFF。**試し刷りの紙を本人が確認したことを、その起動中だけ記録**し、さらに別の確認操作後に自動印刷ONを許可。再起動・プリンター変更で失効。
 - [M4操作ガイド](docs/M4_OPERATOR_GUIDE.md)と[合成テスト](tests/test_m4_print_gate.py)を追加。Tkinterを仮想ディスプレイで起動するGUI試験、モックの手動試し刷り→自動印刷送信試験を追加。
-- [M4 CI](https://github.com/moyashimisosoup/black-cut-auto-print/actions/workflows/m4-operator-build.yml)：Linuxの単体38件＋GUI3件が成功。Windows CI・EXEは実行結果を確認してから更新。
+- [M4 CI](https://github.com/moyashimisosoup/black-cut-auto-print/actions/workflows/m4-operator-build.yml)：[Linux/Windows CI成功](https://github.com/moyashimisosoup/black-cut-auto-print/actions/runs/44905758141)。Linux単体38件＋仮想GUI3件、Windows単体38件がPASS。
+- Windows用評価EXE `BlackCutPrintCandidate.exe` をCIで生成。[Actions Artifact](https://github.com/moyashimisosoup/black-cut-auto-print/actions/runs/44905758141)に7日保存。ZIPをダウンロードして破損がないこと、EXEのWindows PEヘッダを確認済み。
 - **自動印刷の実機試験・排紙検収は行っていません。** Draft PRはmainへ統合しません。
 
 ## M3｜プレビュー専用GUI（印刷OFF固定・開発用）
