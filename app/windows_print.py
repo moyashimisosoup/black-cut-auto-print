@@ -30,6 +30,15 @@ def _check_a4(w: int, h: int) -> bool:
     return abs(ratio - (297 / 210)) < 0.035
 
 
+def _physical_a4(pw: int, ph: int, dpi_x: int, dpi_y: int) -> bool:
+    """Reject larger paper sizes (e.g., A3) even though aspect ratios match."""
+    if min(pw, ph, dpi_x, dpi_y) <= 0:
+        return False
+    physical_mm = (pw * 25.4 / dpi_x, ph * 25.4 / dpi_y)
+    expected = (297, 210) if pw > ph else (210, 297)
+    return all(abs(actual - target) < 7 for actual, target in zip(physical_mm, expected))
+
+
 def submit_a4(image_path: Path, printer_name: str) -> int | None:
     """Send exactly one one-sided monochrome A4 document to named queue.
 
@@ -57,6 +66,13 @@ def submit_a4(image_path: Path, printer_name: str) -> int | None:
     try:
         details = win32print.GetPrinter(printer_handle, 2)
         dm = details.get("pDevMode")
+        status = int(details.get("Status") or 0)
+        unsafe = (win32print.PRINTER_STATUS_OFFLINE |
+                  win32print.PRINTER_STATUS_PAUSED |
+                  win32print.PRINTER_STATUS_ERROR |
+                  win32print.PRINTER_STATUS_PAPER_OUT)
+        if status & unsafe:
+            raise PrinterError("PRINTER_NOT_READY_OR_OFFLINE")
         if dm is None:
             raise PrinterError("DRIVER_DEVMODE_UNAVAILABLE")
         dm.Fields |= (win32con.DM_PAPERSIZE | win32con.DM_ORIENTATION |
@@ -80,9 +96,11 @@ def submit_a4(image_path: Path, printer_name: str) -> int | None:
             oy = win32print.GetDeviceCaps(hdc, win32con.PHYSICALOFFSETY)
             printable_w = win32print.GetDeviceCaps(hdc, win32con.HORZRES)
             printable_h = win32print.GetDeviceCaps(hdc, win32con.VERTRES)
+            dpi_x = win32print.GetDeviceCaps(hdc, win32con.LOGPIXELSX)
+            dpi_y = win32print.GetDeviceCaps(hdc, win32con.LOGPIXELSY)
             if min(pw, ph, printable_w, printable_h) <= 0:
                 raise PrinterError("INVALID_DEVICE_CAPABILITIES")
-            if not _check_a4(pw, ph) or (pw > ph) != landscape:
+            if not _check_a4(pw, ph) or (pw > ph) != landscape or not _physical_a4(pw, ph, dpi_x, dpi_y):
                 raise PrinterError("DRIVER_DID_NOT_SELECT_A4_OR_ORIENTATION")
             if not (0 <= ox < pw and 0 <= oy < ph):
                 raise PrinterError("INVALID_PRINT_OFFSETS")
