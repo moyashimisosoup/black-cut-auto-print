@@ -40,6 +40,23 @@ python app/m4_operator_ui.py
 
 [CI run #44928835667](https://github.com/moyashimisosoup/black-cut-auto-print/actions/runs/44928835667)で`BlackCutPrintTrayCandidate.exe`をArtifact ID 14715669994に保存済み（ZIP検査PASS）。GitHub Actionsのビルドは、`BlackCutPrintTrayCandidate.exe` をArtifactとして一時保存する。成果物の保存期限を超えた場合はworkflowを再実行して生成し、失効したZIPを正式リリースと誤認しない。
 
+## フォルダの指定（2026-11-22 修正）
+
+受信フォルダ直下の新規JPEGだけを監視します。従来は「結果保存先が受信フォルダの親」のケースまで拒否していましたが、実際には安全に監視できるため、修正版で許可しました。
+
+| 受信 | 出力 | 判定 |
+| --- | --- | --- |
+| `D:\\ScanInbox` | `D:\\` | 許可（ドライブ直下に`jobs`と`jobs.sqlite3`を作成） |
+| `D:\\ScanInbox` | `D:\\ScanProcessed` | **推奨・許可**（整理しやすい） |
+| `D:\\ScanInbox` | `D:\\ScanInbox` | 拒否 |
+| `D:\\ScanInbox` | `D:\\ScanInbox\\processed` | 拒否（受信フォルダ内に処理結果を置かない） |
+
+ドライブ直下への保存も許可していますが、ファイル管理のため、別の専用フォルダを推奨します。元のスキャンJPEGや既存のSQLite履歴を上書きしません。
+
+### 以前のEXEから差し替える
+
+[更新パッケージと手順](../packaging/UPDATE_README.txt)を参照。ZIPには修正版EXE、`apply_update.bat`、`apply_update.ps1`、SHA256マニフェストを含む。以前の配布済みM4/M5 EXEのみハッシュ照合のうえ置き換えます。バッチの実行はユーザーの明示操作が必要で、自動印刷設定は有効化しません。旧EXEはバックアップとして残します。
+
 ## 未完了ゲート
 
 - Windows実機起動/トレイ最小化・復帰・停止・終了の確認。
