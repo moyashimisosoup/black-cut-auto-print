@@ -197,6 +197,10 @@ def process(path: Path, output_dir: Path, rotation: int = 0, output_dpi: int = 1
         raise ValueError("INVALID_OUTPUT_SETTINGS")
     if source_dpi is not None and not 72 <= source_dpi <= 1200:
         raise ValueError("INVALID_SOURCE_DPI")
+    # Never confuse an earlier ACCEPT preview with a later HOLD result.
+    # The caller must choose a fresh output directory for each scan.
+    if output_dir.exists() and any(output_dir.iterdir()):
+        raise FileExistsError("OUTPUT_DIRECTORY_NOT_EMPTY: choose a new --output path")
     try:
         image, embedded_dpi = _load(path)
         cleaned, mask, outlined, report = detect_and_clean(image)
