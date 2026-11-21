@@ -10,7 +10,7 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 import m2_monitor as m2
-from windows_print import _check_a4
+from windows_print import _check_a4, _physical_a4
 
 
 def jpeg(folder: Path, filename: str) -> Path:
@@ -178,3 +178,10 @@ def test_manual_test_requires_separate_explicit_permission():
     with pytest.raises(SystemExit) as e:
         m2.run_cli(["--manual-test-print", "preview.png", "--printer", "Canon test"])
     assert e.value.code == 2
+
+
+def test_physical_page_check_rejects_a3_even_same_aspect():
+    assert _physical_a4(2480, 3508, 300, 300)
+    assert _physical_a4(3508, 2480, 300, 300)
+    assert not _physical_a4(3508, 4961, 300, 300)
+    assert not _physical_a4(2480, 3508, 600, 600)
