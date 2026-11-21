@@ -229,7 +229,7 @@ class OperatorApp(tk.Tk):
         incoming = Path(self.inbox.get()).expanduser().resolve(strict=True)
         output = Path(self.output.get()).expanduser().resolve()
         if not incoming.is_dir() or not _paths_safe(incoming, output):
-            raise ValueError("受信フォルダと結果フォルダは重複しない場所を指定してください。")
+            raise ValueError("結果フォルダは受信フォルダと同じ場所・受信フォルダの内部には指定できません。親フォルダや別フォルダは指定できます。")
         output.mkdir(parents=True, exist_ok=True)
         return incoming, output
 
