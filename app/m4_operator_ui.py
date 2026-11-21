@@ -172,6 +172,9 @@ class OperatorApp(tk.Tk):
             self._log("設定を保存できませんでした。")
 
     def _printer_changed(self, *_):
+        # If the queue changes while a worker is active, forbid further sends.
+        if self.worker and self.worker.is_alive():
+            self.stop_event.set()
         self.gate.set_printer(self.printer.get())
         self._sync_gate_controls()
 
@@ -183,10 +186,13 @@ class OperatorApp(tk.Tk):
         available = self.gate.verified_printer == self.printer.get() and idle
         self.arm_button.configure(state="normal" if available and not armed else "disabled")
         self.disarm_button.configure(state="normal" if armed and idle else "disabled")
+        busy = bool(self.manual_worker and self.manual_worker.is_alive())
         self.manual_button.configure(state="normal" if idle and not armed and
-                                     not (self.manual_worker and self.manual_worker.is_alive())
-                                     else "disabled")
+                                     not busy and not self.gate.waiting_for_paper and
+                                     not self.gate.pending_printer else "disabled")
         self.verify_button.configure(state="normal" if self.gate.waiting_for_paper and idle else "disabled")
+        self.printer_combo.configure(state="readonly" if idle and not busy and
+                                     not self.gate.waiting_for_paper else "disabled")
 
     def _list_printers(self):
         if self.worker and self.worker.is_alive():
@@ -283,6 +289,7 @@ class OperatorApp(tk.Tk):
             self._sync_gate_controls()
             return
         self.manual_button.configure(state="disabled")
+        self.printer_combo.configure(state="disabled")
         self._log("手動試し刷りを送信しています（同じジョブを自動で再送しません）。")
         self.manual_worker = threading.Thread(
             target=self._send_manual, args=(preview, printer), daemon=True
@@ -364,6 +371,7 @@ class OperatorApp(tk.Tk):
         self.start_button.configure(state="disabled")
         self.stop_button.configure(state="normal")
         self.manual_button.configure(state="disabled")
+        self.printer_combo.configure(state="disabled")
         self.arm_button.configure(state="disabled")
         self.disarm_button.configure(state="disabled")
         self.status.set("監視を開始しています" + ("（自動印刷ON）" if armed else "（印刷OFF）"))
@@ -425,8 +433,12 @@ class OperatorApp(tk.Tk):
                     self.stop_button.configure(state="disabled")
                     self._refresh_history()
                 elif typ == "manual_ok":
-                    self.gate.manual_submitted()
-                    self._log(f"手動ジョブをWindowsへ送信済み（ID={value}）。排紙は未確認です。")
+                    try:
+                        self.gate.manual_submitted()
+                        self._log(f"手動ジョブをWindowsへ送信済み（ID={value}）。排紙は未確認です。")
+                    except GateError:
+                        self.gate.manual_failed()
+                        self._log("印刷中に条件が変更されたため、実紙確認を無効化しました。")
                     self._refresh_history()
                 elif typ == "manual_error":
                     self.gate.manual_failed()
