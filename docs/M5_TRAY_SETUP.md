@@ -1,6 +1,6 @@
 # APP-033/M5｜タスクトレイ操作・Windows評価版
 
-作業状態：**実装・仮想試験対象。Canon MF244dwの実機印刷は未検証。**
+作業状態：**実装・Linux/Windows CI成功・評価EXE作成済み。Canon MF244dwの実機印刷は未検証。**
 
 ## 使い方
 
@@ -38,7 +38,7 @@ python -m pip install -r requirements-m5-windows.txt
 python app/m4_operator_ui.py
 ~~~
 
-GitHub Actionsのビルドは、`BlackCutPrintTrayCandidate.exe` をArtifactとして一時保存する。成果物の保存期限を超えた場合はworkflowを再実行して生成し、失効したZIPを正式リリースと誤認しない。
+[CI run #44928835667](https://github.com/moyashimisosoup/black-cut-auto-print/actions/runs/44928835667)で`BlackCutPrintTrayCandidate.exe`をArtifact ID 14715669994に保存済み（ZIP検査PASS）。GitHub Actionsのビルドは、`BlackCutPrintTrayCandidate.exe` をArtifactとして一時保存する。成果物の保存期限を超えた場合はworkflowを再実行して生成し、失効したZIPを正式リリースと誤認しない。
 
 ## 未完了ゲート
 
