@@ -77,8 +77,8 @@ def test_backend_failure_does_not_crash_main_window():
         @staticmethod
         def Icon(*args, **kwargs):
             raise RuntimeError("tray unavailable")
-        Menu = FakeBackend.Menu
-        MenuItem = FakeBackend.MenuItem
+        Menu = staticmethod(FakeBackend.Menu)
+        MenuItem = staticmethod(FakeBackend.MenuItem)
 
     tray = TrayController(lambda value: None, platform="nt", backend=Broken())
     assert not tray.start()
