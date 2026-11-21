@@ -1,0 +1,5 @@
+# M1 image detection only. No print/watcher/UI modules are installed.
+numpy>=2.0,<3
+opencv-python-headless>=4.10,<5
+Pillow>=11,<13
+pytest>=8,<10
