@@ -40,7 +40,7 @@ Canon MF244dwからWindows PCに保存されたスキャン画像を監視し、
 - [M2使い方](docs/M2_SETUP.md)：初期設定、ドライラン、明示的な手動試し刷り、自動印刷ONの順。
 - [M2 CHECKPOINT](docs/checkpoints/APP033_M2_DRAFT_20261121.md)。
 - LinuxローカルのM1+M2合成テスト23件PASS、提供実スキャン1件で監視→A4プレビュー生成→再起動後の重複なしを確認（印刷命令は送っていない）。
-- **GitHub Actions CI成功・Windows実機印刷・ユーザーの原稿目視検収は未確認。** Draft PRをmainに統合しない。
+- **[GitHub Actions CI成功](https://github.com/moyashimisosoup/black-cut-auto-print/actions/runs/44902333101)。** Windows実機印刷・ユーザーの原稿目視検収は未確認のため、Draft PRをmainに統合しない。
 
 ## 技術方針（設計段階）
 
