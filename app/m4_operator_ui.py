@@ -19,6 +19,7 @@ from m2_monitor import InboxMonitor, JobStore, ScanPipeline, SingleInstance, _pa
 from m4_print_gate import GateError, PrintGate
 from m5_tray import TrayController
 from print_preflight import check_preview_for_print, PreviewMismatch
+from printer_preferences import prefer_canon_queue
 from version_info import version_label, window_title
 
 
@@ -53,6 +54,7 @@ class OperatorApp(tk.Tk):
         self.rows_by_id: dict[str, dict] = {}
         self.pending_exit = False
         self.config_file = Path(os.environ.get("APPDATA") or str(Path.home())) / "BlackCutPrint" / "settings.json"
+        self._preferred_printer = ""
         self.inbox = tk.StringVar()
         self.output = tk.StringVar()
         self.rotation = tk.StringVar(value="0")
@@ -210,7 +212,8 @@ class OperatorApp(tk.Tk):
                 self.scale_mode.set(data["scale_mode"])
             if str(data.get("trim_mm", 0)) in {"0", "1", "2", "3", "5"}:
                 self.trim_mm.set(str(data["trim_mm"]))
-            # Never restore print permissions or selected queue from disk.
+            self._preferred_printer = str(data.get("last_printer", ""))[:240]
+            # Previous queue is only a selection preference. Print permission is NEVER restored.
         except (OSError, ValueError, TypeError, KeyError):
             pass
 
@@ -221,6 +224,7 @@ class OperatorApp(tk.Tk):
                 "inbox": self.inbox.get(), "output": self.output.get(),
                 "rotation": self.rotation.get(), "source_dpi": self.source_dpi.get(),
                 "scale_mode": self.scale_mode.get(), "trim_mm": self.trim_mm.get(),
+                "last_printer": self.printer.get(),
             }, indent=2, ensure_ascii=False), encoding="utf-8")
         except OSError:
             self._log("設定を保存できませんでした。")
@@ -241,8 +245,12 @@ class OperatorApp(tk.Tk):
 
     def _sync_gate_controls(self):
         armed = self.gate.will_submit(self.printer.get())
-        self.permission.set("自動印刷：ON（監視中の新規原稿のみ）" if armed
-                            else "自動印刷：OFF（今回の起動での手動印刷確認が必要）")
+        if armed:
+            self.permission.set("自動印刷：ON（監視中の新規原稿のみ）")
+        elif self.gate.verified_printer == self.printer.get() and self.gate.verified_printer:
+            self.permission.set("自動印刷：OFF（試し刷り確認済み・許可ボタンで再開できます）")
+        else:
+            self.permission.set("自動印刷：OFF（今回の起動での手動印刷確認が必要）")
         idle = not (self.worker and self.worker.is_alive())
         available = self.gate.verified_printer == self.printer.get() and idle and not (
             self.reprocess_worker and self.reprocess_worker.is_alive())
@@ -273,7 +281,10 @@ class OperatorApp(tk.Tk):
             return
         self.printer_combo.configure(values=available)
         if self.printer.get() not in available:
-            self.printer.set("")
+            suggested = prefer_canon_queue(available, self._preferred_printer)
+            self.printer.set(suggested)
+            if suggested:
+                self._log(f"前回選択またはCanon候補の印刷先：{suggested}（自動印刷はOFF）")
         self._log(f"印刷キュー {len(available)}件を検出。")
 
     def _log(self, line):
