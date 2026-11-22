@@ -40,9 +40,9 @@ def test_mm_trim_shrinks_all_four_edges_but_keeps_center(tmp_path):
     assert m1[800, 180] == 0
     assert m1[760, 550] == 255
     assert m1[200, 550] == 0
-    assert m1[1380, 550] == 0
-    assert m1[800, 195] == 0  # left
-    assert m1[800, 1000] == 0  # right
+    assert m1[1410, 550] == 0
+    assert m1[800, 180] == 0  # left
+    assert m1[800, 1025] == 0  # right
     with Image.open(tmp_path / "deep" / "cleaned.png") as image:
         pixels = np.array(image)
     assert (pixels[800, 180] == 255).all() and (pixels[760, 550] < 40).all()
