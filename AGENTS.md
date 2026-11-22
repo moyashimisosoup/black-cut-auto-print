@@ -15,9 +15,9 @@
 - 1スキャンにつき印刷ジョブ送信は最大1回。スプーラー送信成功と印刷完了は区別する。
 - 元原稿を上書きせず、結果・原因・処理状態を再確認できるようにする。
 
-## 現段階（v0.7.0-rc.1 統合実用版候補 / 実紙検収待ち）
+## 現段階（v0.7.1-rc.1 許可操作改善RC / 実紙検収待ち）
 
-- M1はmain、M2〜M6は段階別のDraft PR #1〜#7に保存。統合候補：[Draft PR #8](https://github.com/moyashimisosoup/black-cut-auto-print/pull/8)（base：main）。**mainへのマージはまだ行わない**。
+- M1はmain、M2〜M6はDraft PR #1〜#7。統合候補は[Draft PR #8](https://github.com/moyashimisosoup/black-cut-auto-print/pull/8)（base：main）、許可ボタンの操作順改善は[Draft PR #9](https://github.com/moyashimisosoup/black-cut-auto-print/pull/9)（base：#8のブランチ）。**mainへのマージはまだ行わない**。
 - [M7実機検収手順](docs/M7_AUTO_PRINT_ACCEPTANCE.md)と[ROADMAP](docs/ROADMAP.md)の最新状態を最初に確認する。
 - 画像の回転/DPI/nominal-fit/内側カット量を変えると自動印刷許可が解除される。試し刷りに使う画像はレポートから現設定と一致を確認する。
 - プリンター候補の表示や前回の選択を復元するだけでは無人印刷をONにできない。再起動時には監視・印刷の許可をOFFにする。

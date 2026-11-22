@@ -64,6 +64,7 @@ class OperatorApp(tk.Tk):
         self.printer = tk.StringVar()
         self.status = tk.StringVar(value="停止中・自動印刷OFF")
         self.permission = tk.StringVar(value="自動印刷：OFF（手動試し刷り未確認）")
+        self.workflow_hint = tk.StringVar(value="原稿を選んで①試し刷りへ進んでください。")
         self.preview_info = tk.StringVar(value="プレビュー情報：履歴を選択してください")
         self._load_settings()
         self._draw()
@@ -132,19 +133,6 @@ class OperatorApp(tk.Tk):
                   foreground="#666666").pack(anchor="w", pady=(4, 0))
         ttk.Separator(container).pack(fill="x", pady=(10, 10))
 
-        controls = ttk.Frame(container)
-        controls.pack(fill="x")
-        self.start_button = ttk.Button(controls, text="監視を開始", command=self._start)
-        self.start_button.pack(side="left", padx=(0, 8))
-        self.stop_button = ttk.Button(controls, text="停止", command=self._stop, state="disabled")
-        self.stop_button.pack(side="left")
-        self.arm_button = ttk.Button(controls, text="自動印刷を許可", command=self._arm,
-                                     state="disabled")
-        self.arm_button.pack(side="right")
-        self.disarm_button = ttk.Button(controls, text="印刷OFF", command=self._disarm,
-                                        state="disabled")
-        self.disarm_button.pack(side="right", padx=8)
-
         ttk.Label(container, textvariable=self.status, font=("Yu Gothic UI", 10, "bold")).pack(anchor="w", pady=(12, 2))
         ttk.Label(container, textvariable=self.permission, foreground="#555555").pack(anchor="w", pady=(0, 8))
 
@@ -170,24 +158,51 @@ class OperatorApp(tk.Tk):
         ttk.Label(container, textvariable=self.preview_info, foreground="#555555").pack(
             anchor="w", pady=(4, 0))
 
-        actions = ttk.Frame(container)
-        actions.pack(fill="x", pady=(8, 8))
-        ttk.Button(actions, text="選択したプレビューを開く", command=self._open_selected).pack(side="left")
-        ttk.Button(actions, text="検出境界を見る", command=self._open_boundary).pack(side="left", padx=(8, 0))
-        self.manual_button = ttk.Button(actions, text="選択した原稿を1枚試し刷り",
+        # Preview controls are separate from approval steps; viewing never prints.
+        preview_actions = ttk.Frame(container)
+        preview_actions.pack(fill="x", pady=(6, 5))
+        ttk.Button(preview_actions, text="選択したプレビューを開く",
+                   command=self._open_selected).pack(side="left")
+        ttk.Button(preview_actions, text="検出境界を見る",
+                   command=self._open_boundary).pack(side="left", padx=(8, 0))
+
+        approval = ttk.LabelFrame(container, text="自動印刷の準備：左から①→④の順に操作",
+                                  padding=(8, 6))
+        approval.pack(fill="x", pady=(2, 4))
+        steps = ttk.Frame(approval)
+        steps.pack(fill="x")
+        for column in range(4):
+            steps.columnconfigure(column, weight=1, uniform="approval")
+        self.manual_button = ttk.Button(steps, text="① 1枚試し刷り",
                                          command=self._manual_test)
-        self.manual_button.pack(side="left", padx=8)
-        self.verify_button = ttk.Button(actions, text="紙の結果を確認", command=self._verify_paper,
-                                         state="disabled")
-        self.verify_button.pack(side="right")
+        self.manual_button.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        self.verify_button = ttk.Button(steps, text="② 紙の結果を確認",
+                                         command=self._verify_paper, state="disabled")
+        self.verify_button.grid(row=0, column=1, sticky="ew", padx=4)
+        self.arm_button = ttk.Button(steps, text="③ 自動印刷を許可",
+                                      command=self._arm, state="disabled")
+        self.arm_button.grid(row=0, column=2, sticky="ew", padx=4)
+        self.start_button = ttk.Button(steps, text="監視のみ開始（印刷OFF）",
+                                        command=self._start)
+        self.start_button.grid(row=0, column=3, sticky="ew", padx=(4, 0))
+        ttk.Label(approval, textvariable=self.workflow_hint, foreground="#555555",
+                  wraplength=690).pack(anchor="w", pady=(6, 0))
+
+        safety = ttk.Frame(container)
+        safety.pack(fill="x", pady=(0, 4))
+        self.stop_button = ttk.Button(safety, text="監視を停止（準備へ戻る）",
+                                       command=self._stop, state="disabled")
+        self.stop_button.pack(side="left")
+        self.disarm_button = ttk.Button(safety, text="自動印刷をOFFにする",
+                                         command=self._disarm, state="disabled")
+        self.disarm_button.pack(side="right")
         ttk.Separator(container).pack(fill="x", pady=5)
         self.log = tk.Text(container, height=5, state="disabled", font=("Consolas", 9), wrap="word")
         self.log.pack(fill="both", expand=False)
-        ttk.Label(container, text="自動印刷：印刷先選択 → 同じ設定で再加工 → 1枚試し刷り → 紙を確認 → 許可 → 監視開始",
-                  foreground="#555555", wraplength=710).pack(anchor="w", pady=(3, 0))
-        ttk.Label(container, text="再起動後の自動印刷許可は無効。印刷完了・紙排出は別々に確認します。",
-                  foreground="#666666").pack(anchor="w", pady=(9, 0))
+        ttk.Label(container, text="監視中は試し刷り・再加工を行えません。先に「監視を停止」を押してください。",
+                  foreground="#666666").pack(anchor="w", pady=(3, 0))
         self._refresh_history()
+        self._sync_gate_controls()
 
     def _folder_field(self, parent, row, label, value):
         ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", pady=5)
@@ -244,31 +259,64 @@ class OperatorApp(tk.Tk):
         self._sync_gate_controls()
 
     def _sync_gate_controls(self):
+        """Keep the numbered approval steps consistent with the existing print gate."""
         armed = self.gate.will_submit(self.printer.get())
+        verified = bool(self.gate.verified_printer and
+                        self.gate.verified_printer == self.printer.get())
         if armed:
             self.permission.set("自動印刷：ON（監視中の新規原稿のみ）")
-        elif self.gate.verified_printer == self.printer.get() and self.gate.verified_printer:
+        elif verified:
             self.permission.set("自動印刷：OFF（試し刷り確認済み・許可ボタンで再開できます）")
         else:
             self.permission.set("自動印刷：OFF（今回の起動での手動印刷確認が必要）")
-        idle = not (self.worker and self.worker.is_alive())
-        available = self.gate.verified_printer == self.printer.get() and idle and not (
-            self.reprocess_worker and self.reprocess_worker.is_alive())
-        self.arm_button.configure(state="normal" if available and not armed else "disabled")
-        self.disarm_button.configure(state="normal" if armed and idle else "disabled")
-        busy = bool((self.manual_worker and self.manual_worker.is_alive()) or
-                    (self.reprocess_worker and self.reprocess_worker.is_alive()))
+
+        monitoring = bool(self.worker and self.worker.is_alive())
+        manual_busy = bool(self.manual_worker and self.manual_worker.is_alive())
+        reprocess_busy = bool(self.reprocess_worker and self.reprocess_worker.is_alive())
+        busy = manual_busy or reprocess_busy
+        waiting = self.gate.waiting_for_paper
+        idle = not monitoring
+
         self.manual_button.configure(state="normal" if idle and not armed and
-                                     not busy and not self.gate.waiting_for_paper and
+                                     not busy and not waiting and
                                      not self.gate.pending_printer else "disabled")
-        self.verify_button.configure(state="normal" if self.gate.waiting_for_paper and idle else "disabled")
+        self.verify_button.configure(state="normal" if waiting and idle else "disabled")
+        self.arm_button.configure(state="normal" if verified and idle and
+                                  not busy and not waiting and not armed else "disabled")
+        self.start_button.configure(
+            text="④ 監視開始（自動印刷）" if armed else "監視のみ開始（印刷OFF）",
+            state="normal" if idle and not busy and not waiting else "disabled")
+        self.stop_button.configure(
+            state="normal" if monitoring and not self.stop_event.is_set() else "disabled")
+        self.disarm_button.configure(state="normal" if armed and idle else "disabled")
         self.printer_combo.configure(state="readonly" if idle and not busy and
-                                     not self.gate.waiting_for_paper else "disabled")
+                                     not waiting else "disabled")
         self.reprocess_button.configure(state="normal" if idle and not busy and
-                                        not self.gate.waiting_for_paper else "disabled")
+                                        not waiting else "disabled")
         for combo in (self.rotation_combo, self.dpi_combo, self.scale_combo, self.trim_combo):
             combo.configure(state="readonly" if idle and not busy and
-                            not self.gate.waiting_for_paper else "disabled")
+                            not waiting else "disabled")
+
+        if monitoring:
+            if self.stop_event.is_set():
+                hint = "監視を停止しています。終了後に①試し刷りなどの操作ができます。"
+            elif armed:
+                hint = "④ 自動印刷の監視中です。変更・試し刷りは「監視を停止」してから。"
+            else:
+                hint = "印刷OFFで監視中です。①試し刷りをするには先に「監視を停止」。"
+        elif manual_busy:
+            hint = "① 試し刷りを送信中です。実際に紙が出たら②で確認してください。"
+        elif reprocess_busy:
+            hint = "原稿を再加工中です。完了後にプレビューを確認してください。"
+        elif waiting:
+            hint = "次は②：Canonから出た紙の内容・向き・部数を確認して押してください。"
+        elif armed:
+            hint = "③ 自動印刷を許可済みです。次は④「監視開始（自動印刷）」。"
+        elif verified:
+            hint = "② 実紙確認が完了しました。次は③「自動印刷を許可」。"
+        else:
+            hint = "原稿を選び、今の設定で再加工・プレビュー確認後、①「1枚試し刷り」。"
+        self.workflow_hint.set(hint)
 
     def _list_printers(self):
         if self.worker and self.worker.is_alive():
