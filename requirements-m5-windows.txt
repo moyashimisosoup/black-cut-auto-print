@@ -1,3 +1,6 @@
 # M5 Windows operator with system tray
 -r requirements-m2-windows.txt
 pystray>=0.19.5,<0.20
+
+# Recoverable auto-cleanup of completed scan originals; no hard delete.
+Send2Trash>=1.8.3,<2
