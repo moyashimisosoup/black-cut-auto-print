@@ -18,6 +18,7 @@ from tkinter import filedialog, messagebox, ttk
 from m2_monitor import InboxMonitor, JobStore, ScanPipeline, SingleInstance, _paths_safe
 from m4_print_gate import GateError, PrintGate
 from m5_tray import TrayController
+from version_info import version_label, window_title
 
 
 def preview_history(output: Path, limit: int = 75) -> list[dict]:
@@ -39,7 +40,7 @@ def preview_history(output: Path, limit: int = 75) -> list[dict]:
 class OperatorApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("黒カット印刷 | APP-033")
+        self.title(window_title())
         self.geometry("760x680")
         self.minsize(650, 590)
         self.worker: threading.Thread | None = None
@@ -78,7 +79,11 @@ class OperatorApp(tk.Tk):
     def _draw(self):
         container = ttk.Frame(self, padding=16)
         container.pack(fill="both", expand=True)
-        ttk.Label(container, text="黒カット印刷", font=("Yu Gothic UI", 17, "bold")).pack(anchor="w")
+        heading = ttk.Frame(container)
+        heading.pack(fill="x", anchor="w")
+        ttk.Label(heading, text="黒カット印刷", font=("Yu Gothic UI", 17, "bold")).pack(side="left")
+        ttk.Label(heading, text=version_label(), font=("Yu Gothic UI", 10),
+                  foreground="#555555").pack(side="left", padx=(12, 0))
         ttk.Label(container, text="新規スキャンを自動加工。手動の紙検収が終わるまで無人印刷はOFFです。",
                   foreground="#555555").pack(anchor="w", pady=(2, 12))
         fields = ttk.Frame(container)
