@@ -6,7 +6,7 @@
 - 作業ブランチ：`feature/app033-m7-approval-ui-20261122`
 - [Draft PR #9](https://github.com/moyashimisosoup/black-cut-auto-print/pull/9)（base：統合RC Draft PR #8のブランチ）
 - 版数：`v0.7.1-rc.1`
-- 開発状態：**許可過程のUI再配置を実装し、Linux単体59件・Xvfb仮想GUI7件PASS。Windows側は最新CI/EXEの結果を別途追記。実機の自動印刷検収は未完了。**
+- 開発状態：**許可過程のUI再配置を実装し、Linux単体59件・Xvfb仮想GUI7件PASS。Windows CI成功・評価EXEとZIPのSHA/CRC検査済み。実機の自動印刷検収は未完了。**
 - main：**未統合**。従来の監視・印刷の安全境界を維持。
 
 ## 実機フィードバック
@@ -27,7 +27,12 @@
 
 - [GitHub Actions #45006899362](https://github.com/moyashimisosoup/black-cut-auto-print/actions/runs/45006899362)：Linux単体**59 PASS**、Xvfb仮想GUI**7 PASS**（warning 1）、失敗なし。
 - [更新バッチCI #45006899399](https://github.com/moyashimisosoup/black-cut-auto-print/actions/runs/45006899399)：Windows上の正常・不一致SHA検査がsuccess。
-- [ ] Windows CIで新EXE作成・ZIPの読戻しと整合性検証（後から追記）。
+- [x] [GitHub Actions #45006899362](https://github.com/moyashimisosoup/black-cut-auto-print/actions/runs/45006899362)：**Linux/Windowsの両ジョブsuccess**。Windows単体59件PASS、未署名PyInstaller EXE生成、パッケージ内部のSHA照合PASS。
+- [x] [M4既存互換 CI #45006899393](https://github.com/moyashimisosoup/black-cut-auto-print/actions/runs/45006899393)：Linux/Windows合格。
+- [x] ZIPのGitHub Actions Artifact `APP033-v0.7.1-rc.1-TrimDepth-Windows-update`（ID `14748291929`、`2026-11-29T09:20:24Z`有効期限記録）を取得し、`APP033-v0.7.1-rc.1-ApprovalUI-Windows.zip`として読戻し。
+- [x] ZIP SHA-256 `e34e950815fb12f84805e8039ced4c31d28028e98efeef1727f552e9fdfba3bd`、7ファイルCRC PASS。`VERSION.txt`=`v0.7.1-rc.1`、Windows EXE（72,416,991 bytes）の`MZ`ヘッダー確認。
+- [x] EXE SHA-256 `11e58bed06bddc9f779e50fb341295bf1730871df2285b69cbb782798e374698`で同梱`new_exe_sha256.txt`と一致。
+- [ ] 利用者Windowsで新EXEのGUI・プリンタ確認、Canon実紙印刷/無人印刷の実機検収。
 - [ ] Windows実機で新版ボタンの並びと条件付き有効化を確認する。
 - [ ] Canonで手動1枚と無人印刷・連続3回・停止・再起動・オフライン状態を検収する。
 - [ ] main統合と正式配布（Canon実機検収後に別途判断）。
