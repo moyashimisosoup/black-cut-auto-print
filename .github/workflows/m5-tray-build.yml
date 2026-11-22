@@ -78,7 +78,7 @@ jobs:
           Get-ChildItem 'dist/update_package' | Select-Object Name, Length
       - uses: actions/upload-artifact@v4
         with:
-          name: APP033-v0.7.0-rc.1-TrimDepth-Windows-update
+          name: APP033-v0.7.1-rc.1-TrimDepth-Windows-update
           path: dist/update_package/
           if-no-files-found: error
           retention-days: 7
