@@ -40,6 +40,7 @@ def test_gui_reprocess_existing_scan_90_degrees_and_disarm(monkeypatch, tmp_path
         app._refresh_history()
         app.rotation.set("90")
         app.scale_mode.set("fit")
+        app.trim_mm.set("1")
         app.tree.selection_set(old)
         app._reprocess_selected()
         deadline = time.monotonic() + 10
@@ -58,6 +59,7 @@ def test_gui_reprocess_existing_scan_90_degrees_and_disarm(monkeypatch, tmp_path
         assert "回転 90°" in app.preview_info.get()
         assert "A4横" in app.preview_info.get()
         assert "fit" in app.preview_info.get()
+        assert "内側カット 1" in app.preview_info.get()
         assert "REPROCESSED_PREVIEW_ONLY" in new["message"]
         with Image.open(new["preview_path"]) as rendered:
             assert rendered.width > rendered.height
