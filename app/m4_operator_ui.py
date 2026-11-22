@@ -61,6 +61,7 @@ class OperatorApp(tk.Tk):
         self.source_dpi = tk.StringVar(value="300")
         self.scale_mode = tk.StringVar(value="nominal")
         self.trim_mm = tk.StringVar(value="0")
+        self.recycle_after_print = tk.BooleanVar(value=True)
         self.printer = tk.StringVar()
         self.status = tk.StringVar(value="停止中・自動印刷OFF")
         self.permission = tk.StringVar(value="自動印刷：OFF（手動試し刷り未確認）")
@@ -129,6 +130,10 @@ class OperatorApp(tk.Tk):
                   foreground="#555555").pack(side="left", padx=9)
         ttk.Label(container, text="注意：内側カットは本文・ページ番号も削る可能性があります。印刷OFFで再加工して確認してください。",
                   foreground="#8b4513").pack(anchor="w", pady=(2, 0))
+        self.recycle_box = ttk.Checkbutton(
+            container, variable=self.recycle_after_print,
+            text="印刷完了を確認できた元JPEGを、ごみ箱へ移す（既定ON／確認できない場合は保持）")
+        self.recycle_box.pack(anchor="w", pady=(5, 0))
         ttk.Label(container, text="nominal=原寸優先（DPI基準） / fit=用紙に合わせて拡大・縮小",
                   foreground="#666666").pack(anchor="w", pady=(4, 0))
         ttk.Separator(container).pack(fill="x", pady=(10, 10))
@@ -185,6 +190,8 @@ class OperatorApp(tk.Tk):
         self.start_button = ttk.Button(steps, text="監視のみ開始（印刷OFF）",
                                         command=self._start)
         self.start_button.grid(row=0, column=3, sticky="ew", padx=(4, 0))
+        ttk.Label(approval, text="試し刷りを省略する場合は③から許可できます（未検証の印刷であることを確認）。",
+                  foreground="#555555", wraplength=690).pack(anchor="w", pady=(5, 0))
         ttk.Label(approval, textvariable=self.workflow_hint, foreground="#555555",
                   wraplength=690).pack(anchor="w", pady=(6, 0))
 
@@ -227,6 +234,8 @@ class OperatorApp(tk.Tk):
                 self.scale_mode.set(data["scale_mode"])
             if str(data.get("trim_mm", 0)) in {"0", "1", "2", "3", "5"}:
                 self.trim_mm.set(str(data["trim_mm"]))
+            if type(data.get("recycle_after_print", True)) is bool:
+                self.recycle_after_print.set(data.get("recycle_after_print", True))
             self._preferred_printer = str(data.get("last_printer", ""))[:240]
             # Previous queue is only a selection preference. Print permission is NEVER restored.
         except (OSError, ValueError, TypeError, KeyError):
@@ -240,6 +249,7 @@ class OperatorApp(tk.Tk):
                 "rotation": self.rotation.get(), "source_dpi": self.source_dpi.get(),
                 "scale_mode": self.scale_mode.get(), "trim_mm": self.trim_mm.get(),
                 "last_printer": self.printer.get(),
+                "recycle_after_print": self.recycle_after_print.get(),
             }, indent=2, ensure_ascii=False), encoding="utf-8")
         except OSError:
             self._log("設定を保存できませんでした。")
@@ -264,7 +274,8 @@ class OperatorApp(tk.Tk):
         verified = bool(self.gate.verified_printer and
                         self.gate.verified_printer == self.printer.get())
         if armed:
-            self.permission.set("自動印刷：ON（監視中の新規原稿のみ）")
+            label = "試し刷り省略・自己承認" if self.gate.direct_authorized_printer else "実紙確認済み"
+            self.permission.set(f"自動印刷：ON（{label}／新規原稿のみ）")
         elif verified:
             self.permission.set("自動印刷：OFF（試し刷り確認済み・許可ボタンで再開できます）")
         else:
@@ -281,8 +292,9 @@ class OperatorApp(tk.Tk):
                                      not busy and not waiting and
                                      not self.gate.pending_printer else "disabled")
         self.verify_button.configure(state="normal" if waiting and idle else "disabled")
-        self.arm_button.configure(state="normal" if verified and idle and
-                                  not busy and not waiting and not armed else "disabled")
+        self.arm_button.configure(state="normal" if bool(self.printer.get()) and idle and
+                                  not busy and not waiting and not armed and
+                                  not self.gate.pending_printer else "disabled")
         self.start_button.configure(
             text="④ 監視開始（自動印刷）" if armed else "監視のみ開始（印刷OFF）",
             state="normal" if idle and not busy and not waiting else "disabled")
@@ -293,6 +305,7 @@ class OperatorApp(tk.Tk):
                                      not waiting else "disabled")
         self.reprocess_button.configure(state="normal" if idle and not busy and
                                         not waiting else "disabled")
+        self.recycle_box.configure(state="normal" if idle and not busy else "disabled")
         for combo in (self.rotation_combo, self.dpi_combo, self.scale_combo, self.trim_combo):
             combo.configure(state="readonly" if idle and not busy and
                             not waiting else "disabled")
@@ -315,7 +328,7 @@ class OperatorApp(tk.Tk):
         elif verified:
             hint = "② 実紙確認が完了しました。次は③「自動印刷を許可」。"
         else:
-            hint = "原稿を選び、今の設定で再加工・プレビュー確認後、①「1枚試し刷り」。"
+            hint = "①試し刷り→②紙確認→③許可、または③から直接許可→④監視開始。未確認の印刷は自己承認です。"
         self.workflow_hint.set(hint)
 
     def _list_printers(self):
@@ -546,25 +559,38 @@ class OperatorApp(tk.Tk):
         self._sync_gate_controls()
 
     def _arm(self):
-        if (self.worker and self.worker.is_alive()) or (self.reprocess_worker and self.reprocess_worker.is_alive()):
+        if ((self.worker and self.worker.is_alive()) or
+                (self.reprocess_worker and self.reprocess_worker.is_alive()) or
+                (self.manual_worker and self.manual_worker.is_alive()) or
+                self.gate.waiting_for_paper or self.gate.pending_printer):
             return
         printer = self.printer.get()
-        if not messagebox.askyesno(
-            "無人印刷ONの最終確認",
-            f"手動試し刷り済みの {printer} に新規スキャンが自動送信されます。\n"
-            "監視開始前の原稿は処理しません。\n\n自動印刷を許可しますか？",
-            parent=self,
-        ):
+        confirmed = self.gate.verified_printer == printer and bool(self.gate.verification_preview)
+        if confirmed:
+            prompt = (f"実紙確認済みの {printer} に、監視開始後の新規スキャンを自動送信します。\n"
+                      "過去のJPEGは自動印刷しません。許可しますか？")
+        else:
+            prompt = (f"【試し刷り・紙の確認を省略】\n\n印刷先：{printer}\n"
+                      "この起動中に印刷品質や排紙は確認されていません。\n"
+                      "以後の新規スキャンを自動印刷します。\n"
+                      "誤った向き・余白、紙詰まり・複数印刷に注意してください。\n\n"
+                      "試し刷りを省略して、自分で自動印刷を許可しますか？")
+        if not printer or not messagebox.askyesno("自動印刷を明示許可", prompt, parent=self):
             return
         try:
             from windows_print import list_printers
             if printer not in list_printers():
                 raise GateError("印刷先が見つかりません")
-            self.gate.arm(printer, explicit_confirmation=True)
+            if confirmed:
+                self.gate.arm(printer, explicit_confirmation=True)
+            else:
+                self.gate.arm_without_trial(
+                    printer, explicit_confirmation=True, acknowledge_unverified=True)
         except Exception as exc:
             messagebox.showerror("自動印刷許可不可", str(exc), parent=self)
             return
-        self._log("自動印刷許可ON。次に監視を開始すると新規スキャンだけを印刷します。")
+        suffix = "（試し刷り省略・実紙未検証）" if not confirmed else "（実紙確認済み）"
+        self._log("自動印刷許可ON " + suffix + "。次に④監視を開始してください。")
         self._sync_gate_controls()
 
     def _disarm(self):
@@ -585,6 +611,7 @@ class OperatorApp(tk.Tk):
                 raise ValueError("回転か読取解像度の指定が無効です")
             mode = self.scale_mode.get()
             trim = float(self.trim_mm.get())
+            recycle = bool(self.recycle_after_print.get())
             if mode not in ("nominal", "fit") or trim not in (0, 1, 2, 3, 5):
                 raise ValueError("A4配置か追加カット量が無効です")
             printer = self.printer.get()
@@ -607,12 +634,14 @@ class OperatorApp(tk.Tk):
         self.status.set("監視を開始しています" + ("（自動印刷ON）" if armed else "（印刷OFF）"))
         self.worker = threading.Thread(
             target=self._run_monitor,
-            args=(inbox, output, rotation, dpi, mode, trim, printer, armed, self.stop_event),
+            args=(inbox, output, rotation, dpi, mode, trim, printer, armed,
+                  recycle, self.stop_event),
             daemon=True,
         )
         self.worker.start()
 
-    def _run_monitor(self, inbox, output, rotation, dpi, mode, trim, printer, armed, stop):
+    def _run_monitor(self, inbox, output, rotation, dpi, mode, trim, printer, armed,
+                     recycle, stop):
         lock = None
         store = None
         try:
@@ -624,12 +653,15 @@ class OperatorApp(tk.Tk):
                 sender = submit_a4
             pipeline = ScanPipeline(store, output, printer=printer, armed=armed,
                                     sender=sender, source_dpi=dpi, rotate=rotation,
-                                    scale_mode=mode, trim_mm=trim, stop=stop)
+                                    scale_mode=mode, trim_mm=trim, stop=stop,
+                                    inbox=inbox, recycle_after_print=armed and recycle)
             monitor = InboxMonitor(inbox, pipeline)
             self.notifications.put(("status", "監視中（印刷ON）" if armed else "監視中（印刷OFF）"))
             while not stop.is_set():
                 for name, status in monitor.poll_once():
                     self.notifications.put(("scan", (name, status)))
+                for name, status in pipeline.poll_cleanup():
+                    self.notifications.put(("cleanup", (name, status)))
                 stop.wait(0.8)
         except Exception as exc:
             self.notifications.put(("monitor_error", f"{type(exc).__name__}: {exc}"))
@@ -680,6 +712,13 @@ class OperatorApp(tk.Tk):
                 elif typ == "scan":
                     name, result = value
                     self._log(f"{name}: {result}")
+                    self._refresh_history()
+                elif typ == "cleanup":
+                    name, outcome = value
+                    if outcome == "SOURCE_RECYCLED":
+                        self._log(f"{name}：印刷キュー完了を確認し、元JPEGをごみ箱へ移しました。")
+                    else:
+                        self._log(f"{name}：印刷完了を確証できず、元JPEGを保持しました（{outcome}）。")
                     self._refresh_history()
                 elif typ == "monitor_error":
                     self._log("監視エラー： " + str(value))
