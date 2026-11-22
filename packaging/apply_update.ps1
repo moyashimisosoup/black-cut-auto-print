@@ -13,7 +13,8 @@ $OldHashes = @(
     '160348312759e418f8117022e9e295d1a0f748ff51fe0de622578a47338a91b7', # M4 initial
     'ff04b5cd14066d8a366115a46a979aa726ad514880a01722c7d7ab4016f9108b', # M5 path fix v1/v2
     'b873bfa9bec6d0adc3bb93639252133924c207a2784f4ff0777a66f44f8b2e51', # M6 rotation/fit candidate
-    'c27890c006b5a92c43fb058858c063fea0d399ee01d7211640171badd77cd4f1'  # v0.6.1-preview.1
+    'c27890c006b5a92c43fb058858c063fea0d399ee01d7211640171badd77cd4f1' , # v0.6.1-preview.1
+    'f96abbd56eed25006e360bfae709603a52cb5a67f57db5ca32630b20315e852f'  # v0.6.2-preview.1 trim depth
 )
 $Stage = $null
 $Backup = $null
