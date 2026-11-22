@@ -13,6 +13,7 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 from m2_monitor import JobStore, ScanPipeline
 from print_preflight import PreviewMismatch, check_preview_for_print
+from printer_preferences import prefer_canon_queue
 
 
 def _approved_preview(tmp_path: Path, **overrides) -> Path:
@@ -107,3 +108,12 @@ def test_auto_print_is_revoked_on_stop_before_spooler(tmp_path):
         assert store.rows()[0]["message"] == "MONITOR_STOPPED_BEFORE_SUBMISSION"
     finally:
         store.close()
+
+
+def test_canon_preference_is_not_arbitrary():
+    names = ["Microsoft Print to PDF", "Canon MF240 Series", "Other printer"]
+    assert prefer_canon_queue(names) == "Canon MF240 Series"
+    assert prefer_canon_queue(names, "Other printer") == "Other printer"
+    assert prefer_canon_queue(names, "Missing printer") == "Canon MF240 Series"
+    assert prefer_canon_queue(["Microsoft Print to PDF"]) == ""
+    assert prefer_canon_queue(["Canon MF244dw", "Canon MF240 Series"]) == ""
