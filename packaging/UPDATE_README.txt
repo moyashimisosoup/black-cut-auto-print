@@ -42,3 +42,14 @@ UPDATE_README.txt              : この説明書
 https://github.com/moyashimisosoup/black-cut-auto-print/pull/4
 
 2026-11-22 | APP-033 | 検証用評価版 / Canon実紙印刷未検証
+
+【v2：ハッシュ照合エラーが表示された場合】
+先に VERIFY_PACKAGE.bat を実行すると、既存EXEを変更せずに更新パッケージの整合性を確認できます。
+- ZIPを以前の展開先とは別の「空のフォルダ」にすべて展開してください。
+- VERIFY_PACKAGE.bat → PACKAGE SHA256 PASS を確認してから apply_update.bat を実行してください。
+- v2の照合画面は、Expected（マニフェスト）と Calculated（新EXEの実際のハッシュ）を表示します。
+- 不一致なら新旧ファイルの混在、展開不完全、ファイル破損、セキュリティソフトの変更などを点検してください。特定原因はハッシュだけでは判定できません。
+- ハッシュが合わない状態では既存EXEを変更しません。検証を飛ばさないでください。
+- 更新ができなくても、新EXEを別フォルダから起動してフォルダ指定を試せます。
+
+v2の追加ファイル：VERIFY_PACKAGE.bat（旧EXEに触れない事前検査）。
