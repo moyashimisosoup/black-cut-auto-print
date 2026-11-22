@@ -135,7 +135,10 @@ class ScanPipeline:
                  sender: Callable[[Path, str], int | None] | None = None,
                  source_dpi: float | None = None, rotate: int = 0,
                  scale_mode: str = "nominal", trim_mm: float = 0,
-                 stop: threading.Event | None = None):
+                 stop: threading.Event | None = None, inbox: Path | None = None,
+                 recycle_after_print: bool = False,
+                 completion_checker: Callable[[str, int], str] | None = None,
+                 recycler: Callable[..., str] | None = None):
         self.store = store
         self.output = output
         self.printer = printer
@@ -150,6 +153,41 @@ class ScanPipeline:
         self.scale_mode = scale_mode
         self.trim_mm = trim_mm
         self.stop = stop or threading.Event()
+        self.inbox = inbox
+        self.recycle_after_print = bool(recycle_after_print)
+        if self.recycle_after_print and (not armed or inbox is None):
+            raise ValueError("CLEANUP_REQUIRES_ARMED_INBOX")
+        self.completion_checker = completion_checker
+        self.recycler = recycler
+        # Only jobs submitted in THIS runtime can be recycled. Old DB records
+        # and manual preview jobs are never picked up for deletion.
+        self.pending_cleanup: dict[str, tuple[Path, str, int, Path, float]] = {}
+
+    def poll_cleanup(self, now: float | None = None) -> list[tuple[str, str]]:
+        """Poll Windows spooler; recycle only when JOB_STATUS_PRINTED observed."""
+        if not self.pending_cleanup:
+            return []
+        from source_cleanup import recycle_scanned_source, spooler_print_status
+        checker = self.completion_checker or spooler_print_status
+        recycler = self.recycler or recycle_scanned_source
+        now = time.monotonic() if now is None else now
+        events = []
+        for job_id, (source, fingerprint, spool_id, preview, first) in list(self.pending_cleanup.items()):
+            try:
+                status = checker(self.printer or "", spool_id)
+            except Exception:
+                status = "UNKNOWN"
+            if status == "PENDING" and now - first < 180:
+                continue
+            if status == "PRINTED" and not self.stop.is_set():
+                outcome = recycler(source, self.inbox, fingerprint)
+                self.store.set(job_id, "SPOOLER_PRINTED", outcome, str(preview), spool_id)
+            else:
+                outcome = "PRINT_UNCONFIRMED_SOURCE_RETAINED"
+                self.store.set(job_id, "SUBMITTED", outcome, str(preview), spool_id)
+            events.append((source.name, outcome))
+            self.pending_cleanup.pop(job_id, None)
+        return events
 
     def hold_unstable(self, source: Path) -> None:
         """Persist timeout as HOLD instead of silently dropping the file."""
@@ -205,6 +243,10 @@ class ScanPipeline:
             return "UNKNOWN"
         self.store.set(job_id, "SUBMITTED", "SPOOLER_ACCEPTED_NOT_PAPER_VERIFIED",
                        str(preview), spool_id)
+        if self.recycle_after_print and isinstance(spool_id, int) and spool_id > 0:
+            self.pending_cleanup[job_id] = (
+                source, fingerprint, spool_id, preview, time.monotonic()
+            )
         return "SUBMITTED"
 
 
