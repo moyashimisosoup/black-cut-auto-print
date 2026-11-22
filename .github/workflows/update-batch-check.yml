@@ -40,3 +40,5 @@ jobs:
           if ($LASTEXITCODE -eq 0) { throw 'Corrupted checksum was accepted' }
           if (!(Test-Path (Join-Path $dir 'BlackCutPrintTrayCandidate.exe'))) { throw 'Preflight deleted the test EXE' }
           Write-Host 'PRECHECK PASS: valid hash accepted, bad hash refused; no installation performed.'
+          # GitHub's pwsh wrapper otherwise exits with the expected rejection code.
+          exit 0
