@@ -2,7 +2,18 @@
 
 Canon MF244dwからWindows PCに保存されたスキャン画像を監視し、原稿の外側の黒・暗灰背景を除去して、A4用紙へ自動印刷するための個人用Windows自動処理ユーティリティ（試作・実機未検収）です。
 
-**APP-ID：APP-033** ｜ **現在：M1 main保存／M2 [Draft PR #1](https://github.com/moyashimisosoup/black-cut-auto-print/pull/1)／M3 [Draft PR #2](https://github.com/moyashimisosoup/black-cut-auto-print/pull/2)／M4 [Draft PR #3](https://github.com/moyashimisosoup/black-cut-auto-print/pull/3)／M5 [Draft PR #4](https://github.com/moyashimisosoup/black-cut-auto-print/pull/4)／M6画質改善 [Draft PR #5](https://github.com/moyashimisosoup/black-cut-auto-print/pull/5)（実印刷未検収）** ｜ **作成元：[App Factory Issue #22](https://github.com/moyashimisosoup/app-factory/issues/22)**
+**APP-ID：APP-033** ｜ **現在：統合実用版候補 [Draft PR #8](https://github.com/moyashimisosoup/black-cut-auto-print/pull/8)、v0.7.0-rc.1（実機での印刷検収待ち・main未統合）** ｜ **作成元：[App Factory Issue #22](https://github.com/moyashimisosoup/app-factory/issues/22)**
+
+## 統合実用版候補 v0.7.0-rc.1
+
+- [Windows実機での設定・印刷検収手順](docs/M7_AUTO_PRINT_ACCEPTANCE.md)
+- [統合PR #8](https://github.com/moyashimisosoup/black-cut-auto-print/pull/8)：段階別PR #1〜#7のコードをまとめた**実機検証待ちの候補**。コード・合成試験・評価用EXEと、実紙への印刷成功を区別する。
+- Canon MF Scan UtilityはJPEG保存・日付別サブフォルダOFF。受信フォルダの直下に新規JPEGが入ることを確認する。
+- Windows起動時にCanon MF240/MF244系の印刷キューを検出し、前回のキュー選択を候補として復元する。ただし**印刷の許可は復元しない**。
+- 固定回転、DPI、`nominal/fit`、内側カット0/1/2/3/5mmを設定。元画像を残して印刷なしで再加工できる。
+- **自動印刷を初めてONにする手順**：現在設定に一致するプレビュー→手動1枚試し刷り→本人が実紙の内容と部数を確認→「自動印刷を許可」→「監視を開始」。以後、稼働中の新しいJPEGをPC操作なしで最大1回ずつ送信する。
+- 以前の設定で作ったプレビュー、切り取りをスキップしたプレビュー、設定情報のない旧版プレビューでは印刷許可を成立させない。
+- 印刷エラー時には`HOLD`/`UNKNOWN`で止め、自動再送しない。再起動後の監視・自動印刷もOFFに戻す。
 
 ## 実現したい操作
 
@@ -117,7 +128,7 @@ Canon MF244dwからWindows PCに保存されたスキャン画像を監視し、
 - **M4：自動印刷対応GUI**：手動試し刷り・実紙確認・明示ON/OFF、安全な履歴を実装。
 - **M5：タスクトレイ常駐**：最小化中も監視を維持。トレイから復帰・停止・終了を操作。
 
-現時点でM1はmain、M2はDraft PR #1、M3はDraft PR #2、M4はDraft PR #3、M5のトレイはDraft PR #4、M6の再加工・A4設定はDraft PR #5です。Canon実紙印刷・正式公開は未検収。Webアプリ化より、無人印刷可能なローカル常駐アプリを優先します。
+M1はmain、M2〜M6はDraft PR #1〜#7の段階的な成果、M7の総合実用版はDraft PR #8にまとめています。**Canon実紙印刷の合格が未確認なので正式版は未確定**。Webアプリ化より、無人印刷可能なローカル常駐アプリを優先します。
 
 ## 公開範囲
 
