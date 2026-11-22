@@ -19,6 +19,9 @@ jobs:
       - name: Validate PowerShell script syntax and safe preflight
         shell: pwsh
         run: |
+          # Negative checksum is an EXPECTED subprocess failure. GitHub Actions
+          # otherwise interprets a native exit code 1 as a step-level exception.
+          $PSNativeCommandUseErrorActionPreference = $false
           $script = Join-Path $PWD 'packaging/apply_update.ps1'
           $tokens = $null
           $parseErrors = $null
