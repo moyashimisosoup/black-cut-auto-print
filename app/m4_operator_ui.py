@@ -40,10 +40,11 @@ class OperatorApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("黒カット印刷 | APP-033")
-        self.geometry("740x660")
-        self.minsize(630, 555)
+        self.geometry("760x680")
+        self.minsize(650, 590)
         self.worker: threading.Thread | None = None
         self.manual_worker: threading.Thread | None = None
+        self.reprocess_worker: threading.Thread | None = None
         self.stop_event = threading.Event()
         self.notifications: queue.Queue[tuple[str, object]] = queue.Queue()
         self.gate = PrintGate()
@@ -54,12 +55,15 @@ class OperatorApp(tk.Tk):
         self.output = tk.StringVar()
         self.rotation = tk.StringVar(value="0")
         self.source_dpi = tk.StringVar(value="300")
+        self.scale_mode = tk.StringVar(value="nominal")
         self.printer = tk.StringVar()
         self.status = tk.StringVar(value="停止中・自動印刷OFF")
         self.permission = tk.StringVar(value="自動印刷：OFF（手動試し刷り未確認）")
         self._load_settings()
         self._draw()
         self.printer.trace_add("write", self._printer_changed)
+        for setting in (self.rotation, self.source_dpi, self.scale_mode):
+            setting.trace_add("write", self._layout_changed)
         # Starts hidden tray companion, but never starts scan monitoring
         # or restores any print authorization.
         self.tray = TrayController(self._tray_command)
@@ -97,6 +101,12 @@ class OperatorApp(tk.Tk):
         self.dpi_combo = ttk.Combobox(options, textvariable=self.source_dpi,
                                      values=("150", "200", "300", "400", "600"), state="readonly", width=6)
         self.dpi_combo.pack(side="left")
+        ttk.Label(options, text=" / A4配置：").pack(side="left", padx=6)
+        self.scale_combo = ttk.Combobox(options, textvariable=self.scale_mode,
+                                        values=("nominal", "fit"), width=9, state="readonly")
+        self.scale_combo.pack(side="left")
+        ttk.Label(container, text="nominal=原寸優先（DPI基準） / fit=用紙に合わせて拡大・縮小",
+                  foreground="#666666").pack(anchor="w", pady=(4, 0))
         ttk.Separator(container).pack(fill="x", pady=(10, 10))
 
         controls = ttk.Frame(container)
@@ -120,6 +130,9 @@ class OperatorApp(tk.Tk):
         ttk.Label(record_controls, text="最近の処理履歴").pack(side="left")
         self.history_refresh = ttk.Button(record_controls, text="更新", command=self._refresh_history)
         self.history_refresh.pack(side="right")
+        self.reprocess_button = ttk.Button(record_controls, text="選択原稿を再加工（印刷なし）",
+                                            command=self._reprocess_selected)
+        self.reprocess_button.pack(side="right", padx=8)
         columns = ("file", "state", "time")
         self.tree = ttk.Treeview(container, columns=columns, show="headings", height=7, selectmode="browse")
         self.tree.heading("file", text="原稿ファイル")
@@ -134,6 +147,7 @@ class OperatorApp(tk.Tk):
         actions = ttk.Frame(container)
         actions.pack(fill="x", pady=(8, 8))
         ttk.Button(actions, text="選択したプレビューを開く", command=self._open_selected).pack(side="left")
+        ttk.Button(actions, text="検出境界を見る", command=self._open_boundary).pack(side="left", padx=(8, 0))
         self.manual_button = ttk.Button(actions, text="選択した原稿を1枚試し刷り",
                                          command=self._manual_test)
         self.manual_button.pack(side="left", padx=8)
@@ -166,6 +180,8 @@ class OperatorApp(tk.Tk):
                 self.rotation.set(str(data["rotation"]))
             if str(data.get("source_dpi", "300")) in {"150", "200", "300", "400", "600"}:
                 self.source_dpi.set(str(data["source_dpi"]))
+            if data.get("scale_mode") in {"nominal", "fit"}:
+                self.scale_mode.set(data["scale_mode"])
             # Never restore print permissions or selected queue from disk.
         except (OSError, ValueError, TypeError, KeyError):
             pass
@@ -176,9 +192,17 @@ class OperatorApp(tk.Tk):
             self.config_file.write_text(json.dumps({
                 "inbox": self.inbox.get(), "output": self.output.get(),
                 "rotation": self.rotation.get(), "source_dpi": self.source_dpi.get(),
+                "scale_mode": self.scale_mode.get(),
             }, indent=2, ensure_ascii=False), encoding="utf-8")
         except OSError:
             self._log("設定を保存できませんでした。")
+
+    def _layout_changed(self, *_):
+        # Changing rotation, DPI or scaling invalidates a previous paper test.
+        if self.gate.verified_printer or self.gate.armed or self.gate.waiting_for_paper:
+            self.gate.manual_failed()
+            self._log("用紙設定の変更により、以前の試し刷り確認を無効化しました。")
+        self._sync_gate_controls()
 
     def _printer_changed(self, *_):
         # If the queue changes while a worker is active, forbid further sends.
@@ -192,16 +216,23 @@ class OperatorApp(tk.Tk):
         self.permission.set("自動印刷：ON（監視中の新規原稿のみ）" if armed
                             else "自動印刷：OFF（今回の起動での手動印刷確認が必要）")
         idle = not (self.worker and self.worker.is_alive())
-        available = self.gate.verified_printer == self.printer.get() and idle
+        available = self.gate.verified_printer == self.printer.get() and idle and not (
+            self.reprocess_worker and self.reprocess_worker.is_alive())
         self.arm_button.configure(state="normal" if available and not armed else "disabled")
         self.disarm_button.configure(state="normal" if armed and idle else "disabled")
-        busy = bool(self.manual_worker and self.manual_worker.is_alive())
+        busy = bool((self.manual_worker and self.manual_worker.is_alive()) or
+                    (self.reprocess_worker and self.reprocess_worker.is_alive()))
         self.manual_button.configure(state="normal" if idle and not armed and
                                      not busy and not self.gate.waiting_for_paper and
                                      not self.gate.pending_printer else "disabled")
         self.verify_button.configure(state="normal" if self.gate.waiting_for_paper and idle else "disabled")
         self.printer_combo.configure(state="readonly" if idle and not busy and
                                      not self.gate.waiting_for_paper else "disabled")
+        self.reprocess_button.configure(state="normal" if idle and not busy and
+                                        not self.gate.waiting_for_paper else "disabled")
+        for combo in (self.rotation_combo, self.dpi_combo, self.scale_combo):
+            combo.configure(state="readonly" if idle and not busy and
+                            not self.gate.waiting_for_paper else "disabled")
 
     def _list_printers(self):
         if self.worker and self.worker.is_alive():
@@ -272,9 +303,70 @@ class OperatorApp(tk.Tk):
         except OSError as exc:
             messagebox.showerror("開けません", str(exc), parent=self)
 
+    def _open_boundary(self):
+        record = self._selected_row()
+        if not record or not record.get("preview_path"):
+            messagebox.showinfo("境界画像なし", "加工済みの履歴を選択してください。", parent=self)
+            return
+        diagnostic = Path(record["preview_path"]).parent / "boundary_overlay.png"
+        if not diagnostic.is_file():
+            messagebox.showinfo("境界画像なし", "このジョブには検出境界画像がありません。", parent=self)
+            return
+        try:
+            if os.name != "nt":
+                raise OSError("画像ビューアー起動はWindowsのみ")
+            os.startfile(str(diagnostic))  # type: ignore[attr-defined]
+        except OSError as exc:
+            messagebox.showerror("開けません", str(exc), parent=self)
+
+    def _reprocess_selected(self):
+        """Manual-only preview from the stored original; never invoke a printer."""
+        if ((self.worker and self.worker.is_alive()) or
+                (self.manual_worker and self.manual_worker.is_alive()) or
+                (self.reprocess_worker and self.reprocess_worker.is_alive()) or
+                self.gate.waiting_for_paper):
+            messagebox.showinfo("処理中", "監視・試し刷りを停止してから再加工してください。", parent=self)
+            return
+        record = self._selected_row()
+        if not record:
+            messagebox.showinfo("原稿を選択", "履歴から元画像を選択してください。", parent=self)
+            return
+        source = Path(record["source_path"])
+        if not source.is_file():
+            messagebox.showerror("元画像がありません", "元のJPEGが移動・削除されています。", parent=self)
+            return
+        try:
+            output = Path(self.output.get()).expanduser().resolve(strict=True)
+            rotation = int(self.rotation.get())
+            dpi = float(self.source_dpi.get())
+            mode = self.scale_mode.get()
+            if mode not in ("nominal", "fit") or rotation not in (0, 90, 180, 270) or not 72 <= dpi <= 1200:
+                raise ValueError("回転・DPI・A4配置が正しくありません")
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("再加工できません", str(exc), parent=self)
+            return
+        # Reprocessing changes the preview, invalidating ANY prior paper test.
+        self.gate.manual_failed()
+        self._log(f"印刷せず再加工します：回転{rotation}度、A4 {mode}")
+        self.status.set("選択した原稿を再加工中（印刷OFF）")
+        self.reprocess_worker = threading.Thread(
+            target=self._run_reprocess, args=(source, output, rotation, dpi, mode),
+            daemon=True)
+        self.reprocess_worker.start()
+        self._sync_gate_controls()
+
+    def _run_reprocess(self, source, output, rotation, dpi, mode):
+        try:
+            from m6_preview import reprocess_preview
+            state, job_id = reprocess_preview(source, output, rotation=rotation,
+                                              source_dpi=dpi, scale_mode=mode)
+            self.notifications.put(("reprocessed", (state, job_id)))
+        except Exception as exc:
+            self.notifications.put(("reprocess_error", f"{type(exc).__name__}: {exc}"))
+
     def _manual_test(self):
-        if self.worker and self.worker.is_alive():
-            messagebox.showerror("監視中", "監視を停止してから試し刷りしてください。", parent=self)
+        if (self.worker and self.worker.is_alive()) or (self.reprocess_worker and self.reprocess_worker.is_alive()):
+            messagebox.showerror("処理中", "監視・再加工を停止してから試し刷りしてください。", parent=self)
             return
         record = self._selected_row()
         printer = self.printer.get()
@@ -329,7 +421,7 @@ class OperatorApp(tk.Tk):
         self._sync_gate_controls()
 
     def _arm(self):
-        if self.worker and self.worker.is_alive():
+        if (self.worker and self.worker.is_alive()) or (self.reprocess_worker and self.reprocess_worker.is_alive()):
             return
         printer = self.printer.get()
         if not messagebox.askyesno(
@@ -359,13 +451,16 @@ class OperatorApp(tk.Tk):
         self._sync_gate_controls()
 
     def _start(self):
-        if self.worker and self.worker.is_alive():
+        if (self.worker and self.worker.is_alive()) or (self.reprocess_worker and self.reprocess_worker.is_alive()):
             return
         try:
             inbox, output = self._validated_paths()
             rotation, dpi = int(self.rotation.get()), float(self.source_dpi.get())
             if rotation not in (0, 90, 180, 270) or not 72 <= dpi <= 1200:
                 raise ValueError("回転か読取解像度の指定が無効です")
+            mode = self.scale_mode.get()
+            if mode not in ("nominal", "fit"):
+                raise ValueError("A4配置設定が無効です")
             printer = self.printer.get()
             armed = self.gate.will_submit(printer)
             if armed:
@@ -386,12 +481,12 @@ class OperatorApp(tk.Tk):
         self.status.set("監視を開始しています" + ("（自動印刷ON）" if armed else "（印刷OFF）"))
         self.worker = threading.Thread(
             target=self._run_monitor,
-            args=(inbox, output, rotation, dpi, printer, armed, self.stop_event),
+            args=(inbox, output, rotation, dpi, mode, printer, armed, self.stop_event),
             daemon=True,
         )
         self.worker.start()
 
-    def _run_monitor(self, inbox, output, rotation, dpi, printer, armed, stop):
+    def _run_monitor(self, inbox, output, rotation, dpi, mode, printer, armed, stop):
         lock = None
         store = None
         try:
@@ -402,7 +497,8 @@ class OperatorApp(tk.Tk):
                 from windows_print import submit_a4
                 sender = submit_a4
             pipeline = ScanPipeline(store, output, printer=printer, armed=armed,
-                                    sender=sender, source_dpi=dpi, rotate=rotation, stop=stop)
+                                    sender=sender, source_dpi=dpi, rotate=rotation,
+                                    scale_mode=mode, stop=stop)
             monitor = InboxMonitor(inbox, pipeline)
             self.notifications.put(("status", "監視中（印刷ON）" if armed else "監視中（印刷OFF）"))
             while not stop.is_set():
@@ -467,6 +563,18 @@ class OperatorApp(tk.Tk):
                     self.start_button.configure(state="normal")
                     self.stop_button.configure(state="disabled")
                     self._refresh_history()
+                elif typ == "reprocessed":
+                    result, job_id = value
+                    self._refresh_history()
+                    if job_id in self.rows_by_id:
+                        self.tree.selection_set(job_id)
+                        self.tree.see(job_id)
+                    self.status.set("再加工完了（印刷OFF）" if result == "READY_REVIEW" else
+                                    "再加工を保留（印刷OFF）")
+                    self._log(f"再加工：{result}。新しい履歴に保存しました。印刷は行っていません。")
+                elif typ == "reprocess_error":
+                    self.status.set("再加工エラー（印刷OFF）")
+                    self._log("再加工失敗：" + str(value))
                 elif typ == "manual_ok":
                     try:
                         self.gate.manual_submitted()
@@ -492,7 +600,8 @@ class OperatorApp(tk.Tk):
                         # The Tk interpreter can already be destroyed here.
                         # Do not call any Tk method after synchronous exit.
                         if not ((self.worker and self.worker.is_alive()) or
-                                (self.manual_worker and self.manual_worker.is_alive())):
+                                (self.manual_worker and self.manual_worker.is_alive()) or
+                                (self.reprocess_worker and self.reprocess_worker.is_alive())):
                             return
                     elif value == "tray_error":
                         self.tray_available = False
@@ -502,7 +611,8 @@ class OperatorApp(tk.Tk):
         except queue.Empty:
             pass
         if self.pending_exit and not (self.worker and self.worker.is_alive()) \
-                and not (self.manual_worker and self.manual_worker.is_alive()):
+                and not (self.manual_worker and self.manual_worker.is_alive()) \
+                and not (self.reprocess_worker and self.reprocess_worker.is_alive()):
             self._finish_exit()
             return
         self.after(200, self._events)
@@ -512,7 +622,8 @@ class OperatorApp(tk.Tk):
         self.gate.disarm()
         self.stop_event.set()
         if not (self.worker and self.worker.is_alive()) \
-                and not (self.manual_worker and self.manual_worker.is_alive()):
+                and not (self.manual_worker and self.manual_worker.is_alive()) \
+                and not (self.reprocess_worker and self.reprocess_worker.is_alive()):
             self._finish_exit()
         else:
             self.status.set("終了処理中：ジョブの再送信はしません")

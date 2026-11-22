@@ -27,6 +27,9 @@ class Detection:
     foreground_contrast: float | None = None
     source_dpi: float | None = None
     dpi_assumed: bool = False
+    rotation_degrees: int = 0
+    scale_mode: str = "nominal"
+    a4_orientation: str | None = None
 
 
 def _load(path: Path) -> tuple[np.ndarray, float | None]:
@@ -160,8 +163,9 @@ def _rotate(image: np.ndarray, degrees: int) -> np.ndarray:
     return np.rot90(image, (degrees // 90) % 4).copy() if degrees else image
 
 
-def layout_a4(cleaned: np.ndarray, mask: np.ndarray, output_dpi: int, source_dpi: float, rotation: int = 0) -> np.ndarray:
-    if output_dpi not in {150, 300} or rotation not in {0, 90, 180, 270}:
+def layout_a4(cleaned: np.ndarray, mask: np.ndarray, output_dpi: int, source_dpi: float,
+              rotation: int = 0, scale_mode: str = "nominal") -> np.ndarray:
+    if output_dpi not in {150, 300} or rotation not in {0, 90, 180, 270} or scale_mode not in {"nominal", "fit"}:
         raise ValueError("INVALID_OUTPUT_SETTINGS")
     ys, xs = np.where(mask > 0)
     if len(xs) == 0:
@@ -178,8 +182,10 @@ def layout_a4(cleaned: np.ndarray, mask: np.ndarray, output_dpi: int, source_dpi
     page_w, page_h = (round(mm_w / 25.4 * output_dpi), round(mm_h / 25.4 * output_dpi))
     inset = round(5 / 25.4 * output_dpi)
     usable_w, usable_h = page_w - 2 * inset, page_h - 2 * inset
-    scale = min(float(output_dpi) / source_dpi, usable_w / paper.shape[1], usable_h / paper.shape[0])
-    # Never enlarge beyond nominal physical dimensions by default.
+    fit_scale = min(usable_w / paper.shape[1], usable_h / paper.shape[0])
+    scale = min(float(output_dpi) / source_dpi, fit_scale) if scale_mode == "nominal" else fit_scale
+    # Nominal uses scan DPI (or a declared assumption); fit enlarges to paper.
+    # Neither mode attempts OCR or automatically infers upright text.
     if scale <= 0:
         raise ValueError("INVALID_SCALE")
     rw, rh = max(1, round(paper.shape[1] * scale)), max(1, round(paper.shape[0] * scale))
@@ -192,8 +198,9 @@ def layout_a4(cleaned: np.ndarray, mask: np.ndarray, output_dpi: int, source_dpi
     return cv2.cvtColor(gray, cv2.COLOR_GRAY2RGB)
 
 
-def process(path: Path, output_dir: Path, rotation: int = 0, output_dpi: int = 150, source_dpi: float | None = None) -> Detection:
-    if rotation not in {0, 90, 180, 270} or output_dpi not in {150, 300}:
+def process(path: Path, output_dir: Path, rotation: int = 0, output_dpi: int = 150,
+            source_dpi: float | None = None, scale_mode: str = "nominal") -> Detection:
+    if rotation not in {0, 90, 180, 270} or output_dpi not in {150, 300} or scale_mode not in {"nominal", "fit"}:
         raise ValueError("INVALID_OUTPUT_SETTINGS")
     if source_dpi is not None and not 72 <= source_dpi <= 1200:
         raise ValueError("INVALID_SOURCE_DPI")
@@ -206,6 +213,8 @@ def process(path: Path, output_dir: Path, rotation: int = 0, output_dpi: int = 1
         cleaned, mask, outlined, report = detect_and_clean(image)
         report.dpi_assumed = source_dpi is None and embedded_dpi is None
         report.source_dpi = source_dpi or embedded_dpi or 300.0
+        report.rotation_degrees = rotation
+        report.scale_mode = scale_mode
     except (ValueError, OSError, UnidentifiedImageError, cv2.error) as exc:
         report = Detection("HOLD", f"INPUT_ERROR:{type(exc).__name__}")
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -216,7 +225,10 @@ def process(path: Path, output_dir: Path, rotation: int = 0, output_dpi: int = 1
     Image.fromarray(mask).save(output_dir / "paper_mask.png")
     if report.status == "ACCEPT":
         Image.fromarray(cleaned).save(output_dir / "cleaned.png")
-        preview = layout_a4(cleaned, mask, output_dpi, report.source_dpi, rotation)
+        ys, xs = np.where(mask > 0)
+        crop_landscape = (int(xs.max()) - int(xs.min())) > (int(ys.max()) - int(ys.min()))
+        report.a4_orientation = "landscape" if crop_landscape != (rotation in {90, 270}) else "portrait"
+        preview = layout_a4(cleaned, mask, output_dpi, report.source_dpi, rotation, scale_mode)
         Image.fromarray(preview).save(output_dir / "a4_preview.png", dpi=(output_dpi, output_dpi))
     (output_dir / "report.json").write_text(json.dumps(asdict(report), ensure_ascii=False, indent=2), encoding="utf-8")
     return report
@@ -229,10 +241,12 @@ def main() -> int:
     parser.add_argument("--rotate", type=int, choices=(0, 90, 180, 270), default=0)
     parser.add_argument("--output-dpi", type=int, choices=(150, 300), default=150)
     parser.add_argument("--source-dpi", type=float, help="If scan metadata lacks DPI, set a calibrated value; default assumes 300 DPI")
+    parser.add_argument("--scale-mode", choices=("nominal", "fit"), default="nominal",
+                        help="nominal: do not enlarge beyond source physical size; fit: fill A4 printable area")
     args = parser.parse_args()
     if args.input.resolve().is_relative_to(args.output.resolve()):
         parser.error("Input must not be inside the output directory")
-    result = process(args.input, args.output, args.rotate, args.output_dpi, args.source_dpi)
+    result = process(args.input, args.output, args.rotate, args.output_dpi, args.source_dpi, args.scale_mode)
     print(json.dumps(asdict(result), ensure_ascii=False, indent=2))
     return 0 if result.status == "ACCEPT" else 2
 

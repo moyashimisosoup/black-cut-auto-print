@@ -2,7 +2,7 @@
 
 Canon MF244dwからWindows PCに保存されたスキャン画像を監視し、原稿の外側の黒・暗灰背景を除去して、A4用紙へ自動印刷するための個人用Windows自動処理ユーティリティ（試作・実機未検収）です。
 
-**APP-ID：APP-033** ｜ **現在：M1 main保存／M2 [Draft PR #1](https://github.com/moyashimisosoup/black-cut-auto-print/pull/1)／M3 [Draft PR #2](https://github.com/moyashimisosoup/black-cut-auto-print/pull/2)／M4 [Draft PR #3](https://github.com/moyashimisosoup/black-cut-auto-print/pull/3)／M5 [Draft PR #4](https://github.com/moyashimisosoup/black-cut-auto-print/pull/4)でトレイ常駐を試作（実機未検収）** ｜ **作成元：[App Factory Issue #22](https://github.com/moyashimisosoup/app-factory/issues/22)**
+**APP-ID：APP-033** ｜ **現在：M1 main保存／M2 [Draft PR #1](https://github.com/moyashimisosoup/black-cut-auto-print/pull/1)／M3 [Draft PR #2](https://github.com/moyashimisosoup/black-cut-auto-print/pull/2)／M4 [Draft PR #3](https://github.com/moyashimisosoup/black-cut-auto-print/pull/3)／M5 [Draft PR #4](https://github.com/moyashimisosoup/black-cut-auto-print/pull/4)／M6画質改善 [Draft PR #5](https://github.com/moyashimisosoup/black-cut-auto-print/pull/5)（実印刷未検収）** ｜ **作成元：[App Factory Issue #22](https://github.com/moyashimisosoup/app-factory/issues/22)**
 
 ## 実現したい操作
 
@@ -32,6 +32,14 @@ Canon MF244dwからWindows PCに保存されたスキャン画像を監視し、
 - 画像1枚を入力すると、候補紙面輪郭・保持マスク・外側白化画像・A4プレビューを保存します。
 - 2026-11-21にローカル環境で合成テスト8件成功。提供実スキャン1件でもプレビューを作成できました（目視検収は未実施）。
 - **M1単体は画像処理のみです。** 受信監視・Windows印刷API・GUI/EXEの後続実装はM2〜M4のDraft PRにあります。
+
+## M6｜原稿回転の再加工とA4配置（Draft PR #5）
+
+- 過去の`READY_REVIEW`原稿を選び「選択原稿を再加工（印刷なし）」で、スキャンし直さず0/90/180/270度の回転を適用。元のJPEGも旧履歴も変更しない。
+- A4配置は`nominal`（DPI基準・拡大を抑える）と`fit`（用紙に合わせる）の2種。原稿形状と回転後の向きに応じて縦/横A4を選ぶ。
+- 「検出境界を見る」で紙面認識の赤い輪郭画像を確認できる。本文を欠損させかねない自動端トリム・OCR正立方向推定はまだ追加していない。
+- 再加工は**印刷APIを呼ばない**。回転・DPI・倍率設定変更では自動印刷許可を取り消す。
+- [操作手順](docs/M6_LAYOUT_REPROCESS.md)。ユーザー提示プレビューから今回の改善を立案したが、元画像による影の境界検収と印刷実機試験は未完了。
 
 ## M5｜Windowsトレイ常駐（Draft PR #4）
 
@@ -94,7 +102,7 @@ Canon MF244dwからWindows PCに保存されたスキャン画像を監視し、
 - **M4：自動印刷対応GUI**：手動試し刷り・実紙確認・明示ON/OFF、安全な履歴を実装。
 - **M5：タスクトレイ常駐**：最小化中も監視を維持。トレイから復帰・停止・終了を操作。
 
-現時点でM1はmain、M2はDraft PR #1、M3はDraft PR #2、M4はDraft PR #3、M5のタスクトレイ常駐はDraft PR #4です。Canon実機検収・正式公開は未実施。Webアプリ化より、無人印刷可能なローカル常駐アプリを優先します。
+現時点でM1はmain、M2はDraft PR #1、M3はDraft PR #2、M4はDraft PR #3、M5のトレイはDraft PR #4、M6の再加工・A4設定はDraft PR #5です。Canon実紙印刷・正式公開は未検収。Webアプリ化より、無人印刷可能なローカル常駐アプリを優先します。
 
 ## 公開範囲
 
