@@ -134,7 +134,7 @@ class ScanPipeline:
                  printer: str | None = None, armed: bool = False,
                  sender: Callable[[Path, str], int | None] | None = None,
                  source_dpi: float | None = None, rotate: int = 0,
-                 scale_mode: str = "nominal",
+                 scale_mode: str = "nominal", trim_mm: float = 0,
                  stop: threading.Event | None = None):
         self.store = store
         self.output = output
@@ -145,7 +145,10 @@ class ScanPipeline:
         if scale_mode not in {"nominal", "fit"}:
             raise ValueError("INVALID_SCALE_MODE")
         self.rotate = rotate
+        if trim_mm not in (0, 1, 2, 3, 5):
+            raise ValueError("INVALID_TRIM_SETTINGS")
         self.scale_mode = scale_mode
+        self.trim_mm = trim_mm
         self.stop = stop or threading.Event()
 
     def hold_unstable(self, source: Path) -> None:
@@ -171,7 +174,8 @@ class ScanPipeline:
         self.store.set(job_id, "PROCESSING")
         try:
             result = process(source, out, rotation=self.rotate, output_dpi=300,
-                             source_dpi=self.source_dpi, scale_mode=self.scale_mode)
+                             source_dpi=self.source_dpi, scale_mode=self.scale_mode,
+                             trim_mm=self.trim_mm)
         except Exception as exc:
             self.store.set(job_id, "HOLD", f"PROCESSING_ERROR:{type(exc).__name__}")
             return "HOLD"
@@ -303,6 +307,7 @@ def run_cli(argv: list[str] | None = None) -> int:
     p.add_argument("--rotate", type=int, choices=(0, 90, 180, 270), default=0)
     p.add_argument("--source-dpi", type=float)
     p.add_argument("--scale-mode", choices=("nominal", "fit"), default="nominal")
+    p.add_argument("--trim-mm", type=float, choices=(0, 1, 2, 3, 5), default=0)
     p.add_argument("--poll-seconds", type=float, default=0.75)
     p.add_argument("--settle-seconds", type=float, default=2.5)
     args = p.parse_args(argv)
@@ -357,7 +362,7 @@ def run_cli(argv: list[str] | None = None) -> int:
         pipeline = ScanPipeline(store, output, printer=args.printer,
                                 armed=args.arm_printing, sender=sender,
                                 source_dpi=args.source_dpi, rotate=args.rotate,
-                                scale_mode=args.scale_mode, stop=stop)
+                                scale_mode=args.scale_mode, trim_mm=args.trim_mm, stop=stop)
         monitor = InboxMonitor(inbox, pipeline, settle_seconds=args.settle_seconds)
         print(f"MONITOR_ON printing={'ARMED' if args.arm_printing else 'DISABLED'}; old files ignored; Ctrl+C to stop", flush=True)
         while not stop.is_set():
