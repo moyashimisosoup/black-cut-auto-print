@@ -32,6 +32,7 @@ def test_gui_reprocess_existing_scan_90_degrees_and_disarm(monkeypatch, tmp_path
     store.close()
 
     app = OperatorApp()
+    assert "v0.6.1-preview.1" in app.title()
     app.withdraw()
     try:
         app.inbox.set(str(inbox))
@@ -52,6 +53,11 @@ def test_gui_reprocess_existing_scan_90_degrees_and_disarm(monkeypatch, tmp_path
         assert new_ids, "No new GUI preview job in SQLite history"
         new = app.rows_by_id[new_ids[0]]
         assert new["state"] == "READY_REVIEW"
+        app.tree.selection_set(new_ids[0])
+        app._update_preview_info()
+        assert "回転 90°" in app.preview_info.get()
+        assert "A4横" in app.preview_info.get()
+        assert "fit" in app.preview_info.get()
         assert "REPROCESSED_PREVIEW_ONLY" in new["message"]
         with Image.open(new["preview_path"]) as rendered:
             assert rendered.width > rendered.height
