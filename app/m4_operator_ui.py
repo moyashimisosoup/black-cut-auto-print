@@ -147,6 +147,7 @@ class OperatorApp(tk.Tk):
         actions = ttk.Frame(container)
         actions.pack(fill="x", pady=(8, 8))
         ttk.Button(actions, text="選択したプレビューを開く", command=self._open_selected).pack(side="left")
+        ttk.Button(actions, text="検出境界を見る", command=self._open_boundary).pack(side="left", padx=(8, 0))
         self.manual_button = ttk.Button(actions, text="選択した原稿を1枚試し刷り",
                                          command=self._manual_test)
         self.manual_button.pack(side="left", padx=8)
@@ -299,6 +300,22 @@ class OperatorApp(tk.Tk):
             if os.name != "nt":
                 raise OSError("画像ビューアー起動はWindowsのみ")
             os.startfile(str(preview))  # type: ignore[attr-defined]
+        except OSError as exc:
+            messagebox.showerror("開けません", str(exc), parent=self)
+
+    def _open_boundary(self):
+        record = self._selected_row()
+        if not record or not record.get("preview_path"):
+            messagebox.showinfo("境界画像なし", "加工済みの履歴を選択してください。", parent=self)
+            return
+        diagnostic = Path(record["preview_path"]).parent / "boundary_overlay.png"
+        if not diagnostic.is_file():
+            messagebox.showinfo("境界画像なし", "このジョブには検出境界画像がありません。", parent=self)
+            return
+        try:
+            if os.name != "nt":
+                raise OSError("画像ビューアー起動はWindowsのみ")
+            os.startfile(str(diagnostic))  # type: ignore[attr-defined]
         except OSError as exc:
             messagebox.showerror("開けません", str(exc), parent=self)
 
