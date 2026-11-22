@@ -53,3 +53,11 @@ https://github.com/moyashimisosoup/black-cut-auto-print/pull/4
 - 更新ができなくても、新EXEを別フォルダから起動してフォルダ指定を試せます。
 
 v2の追加ファイル：VERIFY_PACKAGE.bat（旧EXEに触れない事前検査）。
+
+【v0.6.1-preview.1：版数の確認】
+このZIPの VERSION.txt にバージョンが書かれています。
+新しいEXEを起動するとタイトルバーに「黒カット印刷 v0.6.1-preview.1 | APP-033」と表示されます。
+旧アプリのタイトル「黒カット印刷 | APP-033」と区別できます。
+履歴の画像を選択すると、そのプレビューに実際に適用された回転・A4縦横・nominal/fitも表示されます。
+修正版EXEは以前のM6評価版にも、既知のSHA-256を照合できた場合に限り差し替え適用できます。
+新旧EXEを混ぜて展開せず、新しい空フォルダで VERIFY_PACKAGE.bat を実行してください。
