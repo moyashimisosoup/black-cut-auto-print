@@ -10,6 +10,7 @@ import threading
 from collections.abc import Callable
 
 from PIL import Image, ImageDraw
+from version_info import version_label
 
 
 def make_icon() -> Image.Image:
@@ -50,7 +51,7 @@ class TrayController:
             icon = api.Icon(
                 "APP033_BlackCutPrint",
                 make_icon(),
-                "黒カット印刷",
+                f"黒カット印刷 {version_label()}",
                 menu=api.Menu(
                     api.MenuItem("画面を表示", lambda _icon, _item: self.send("show"), default=True),
                     api.MenuItem("監視を停止", lambda _icon, _item: self.send("stop")),
