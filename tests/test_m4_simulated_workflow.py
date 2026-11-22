@@ -72,25 +72,52 @@ def test_mocked_manual_proof_then_auto_submit(monkeypatch, tmp_path):
         app.printer.set("Canon MF244dw")
         app._refresh_history()
         app.tree.selection_set(job)
+        app._sync_gate_controls()
+        # The four approval buttons must read left-to-right, without jumping
+        # between different parts of the window to find the next action.
+        steps = [app.manual_button, app.verify_button, app.arm_button, app.start_button]
+        assert [button.grid_info()["column"] for button in steps] == [0, 1, 2, 3]
+        assert all(button.master == steps[0].master for button in steps)
+        assert [button.cget("text") for button in steps[:3]] == [
+            "① 1枚試し刷り", "② 紙の結果を確認", "③ 自動印刷を許可"
+        ]
+        assert "監視のみ開始（印刷OFF）" == app.start_button.cget("text")
+        assert "①" in app.workflow_hint.get()
+        assert app.verify_button.instate(["disabled"])
+        assert app.arm_button.instate(["disabled"])
         # Initial state must never submit just because a preview exists.
         assert not app.gate.armed
         app._manual_test()
         assert pump_until(app, lambda: app.gate.waiting_for_paper)
         assert len(sent) == 1
+        assert app.verify_button.instate(["!disabled"])
+        assert app.arm_button.instate(["disabled"])
+        assert "次は②" in app.workflow_hint.get()
         assert not app.gate.armed
 
         app._verify_paper()  # mocked acknowledgement
         assert not app.gate.armed  # second explicit arm is still required
+        assert app.arm_button.instate(["!disabled"])
+        assert app.start_button.cget("text") == "監視のみ開始（印刷OFF）"
+        assert "次は③" in app.workflow_hint.get()
         app._arm()
         assert app.gate.will_submit("Canon MF244dw")
+        assert app.start_button.cget("text") == "④ 監視開始（自動印刷）"
+        assert "次は④" in app.workflow_hint.get()
         app._start()
         assert pump_until(app, lambda: app.status.get().startswith("監視中"), 4)
+        assert app.manual_button.instate(["disabled"])
+        assert app.arm_button.instate(["disabled"])
+        assert app.stop_button.instate(["!disabled"])
+        assert "自動印刷の監視中" in app.workflow_hint.get()
         Image.new("RGB", (230, 300), "white").save(inbox / "scan-1.jpg", "JPEG")
         assert pump_until(app, lambda: len(sent) == 2 and
                           any(r["state"] == "SUBMITTED" for r in app.rows_by_id.values()), 9)
         assert sent[1][1] == "Canon MF244dw"
         app._stop()
         assert pump_until(app, lambda: not app.worker.is_alive(), 4)
+        app._sync_gate_controls()
+        assert app.start_button.cget("text") == "監視のみ開始（印刷OFF）"
         assert len(sent) == 2
 
         # The next process never inherits the simulated approval.
