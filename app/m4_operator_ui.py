@@ -18,6 +18,7 @@ from tkinter import filedialog, messagebox, ttk
 from m2_monitor import InboxMonitor, JobStore, ScanPipeline, SingleInstance, _paths_safe
 from m4_print_gate import GateError, PrintGate
 from m5_tray import TrayController
+from print_preflight import check_preview_for_print, PreviewMismatch
 from version_info import version_label, window_title
 
 
@@ -64,6 +65,9 @@ class OperatorApp(tk.Tk):
         self.preview_info = tk.StringVar(value="プレビュー情報：履歴を選択してください")
         self._load_settings()
         self._draw()
+        # Show installed queues on Windows without selecting an arbitrary printer.
+        if os.name == "nt":
+            self.after(10, self._list_printers)
         self.printer.trace_add("write", self._printer_changed)
         for setting in (self.rotation, self.source_dpi, self.scale_mode, self.trim_mm):
             setting.trace_add("write", self._layout_changed)
@@ -177,6 +181,8 @@ class OperatorApp(tk.Tk):
         ttk.Separator(container).pack(fill="x", pady=5)
         self.log = tk.Text(container, height=5, state="disabled", font=("Consolas", 9), wrap="word")
         self.log.pack(fill="both", expand=False)
+        ttk.Label(container, text="自動印刷の手順：印刷先選択 → 現設定で再加工 → 1枚試し刷り → 実紙確認 → 自動印刷許可 → 監視開始",
+                  foreground="#555555").pack(anchor="w", pady=(3, 0))
         ttk.Label(container, text="再起動後の自動印刷許可は無効。印刷完了・紙排出は別々に確認します。",
                   foreground="#666666").pack(anchor="w", pady=(9, 0))
         self._refresh_history()
@@ -432,8 +438,11 @@ class OperatorApp(tk.Tk):
             return
         preview = Path(record["preview_path"]) if record["preview_path"] else Path("")
         try:
+            check_preview_for_print(
+                preview, rotation=int(self.rotation.get()), dpi=float(self.source_dpi.get()),
+                scale_mode=self.scale_mode.get(), trim_mm=float(self.trim_mm.get()))
             self.gate.begin_manual_test(printer, preview)
-        except GateError as exc:
+        except (GateError, PreviewMismatch, ValueError) as exc:
             messagebox.showerror("試し刷り不可", str(exc), parent=self)
             return
         ok = messagebox.askyesno(
