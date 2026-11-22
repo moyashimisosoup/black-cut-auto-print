@@ -11,7 +11,8 @@ $AllowedNames = @('BlackCutPrintTrayCandidate.exe', 'BlackCutPrintCandidate.exe'
 $OldHashes = @(
     '466a3396b9b92ca25d28c6fad90b9ad0f8d52601cbed906ca20c6f173e8351f3', # M5 initial
     '160348312759e418f8117022e9e295d1a0f748ff51fe0de622578a47338a91b7', # M4 initial
-    'ff04b5cd14066d8a366115a46a979aa726ad514880a01722c7d7ab4016f9108b'  # M5 path fix v1/v2
+    'ff04b5cd14066d8a366115a46a979aa726ad514880a01722c7d7ab4016f9108b', # M5 path fix v1/v2
+    'b873bfa9bec6d0adc3bb93639252133924c207a2784f4ff0777a66f44f8b2e51'  # M6 rotation/fit candidate
 )
 $Stage = $null
 $Backup = $null
