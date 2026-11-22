@@ -84,9 +84,10 @@ def test_mocked_manual_proof_then_auto_submit(monkeypatch, tmp_path):
         assert "監視のみ開始（印刷OFF）" == app.start_button.cget("text")
         assert "①" in app.workflow_hint.get()
         assert app.verify_button.instate(["disabled"])
-        assert app.arm_button.instate(["disabled"])
+        assert app.arm_button.instate(["!disabled"])  # user can deliberately bypass trial
         # Initial state must never submit just because a preview exists.
         assert not app.gate.armed
+        assert app.recycle_after_print.get() is True  # user can opt out
         app._manual_test()
         assert pump_until(app, lambda: app.gate.waiting_for_paper)
         assert len(sent) == 1
@@ -123,6 +124,47 @@ def test_mocked_manual_proof_then_auto_submit(monkeypatch, tmp_path):
         # The next process never inherits the simulated approval.
         from m4_print_gate import PrintGate
         assert not PrintGate().will_submit("Canon MF244dw")
+    finally:
+        app._close()
+        try:
+            app.update()
+        except Exception:
+            pass
+
+
+def test_direct_arm_skips_trial_and_starts_monitor_without_existing_jobs(monkeypatch, tmp_path):
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    previous = inbox / "old.jpg"
+    Image.new("RGB", (230, 300), "white").save(previous)
+    output = tmp_path / "output"
+    output.mkdir()
+    monkeypatch.setattr(windows_print, "list_printers", lambda: ["Canon MF240 Series"])
+    monkeypatch.setattr(messagebox, "askyesno", lambda *_a, **_kw: True)
+    monkeypatch.setattr(windows_print, "submit_a4",
+                        lambda *_: pytest.fail("No pre-existing scan may be printed"))
+    app = OperatorApp()
+    app.withdraw()
+    try:
+        app.inbox.set(str(inbox))
+        app.output.set(str(output))
+        app.printer.set("Canon MF240 Series")
+        assert not app.gate.verified_printer
+        assert app.arm_button.instate(["!disabled"])
+        app._arm()  # no paper test/verification
+        assert app.gate.will_submit("Canon MF240 Series")
+        assert app.gate.direct_authorized_printer == "Canon MF240 Series"
+        assert "試し刷り省略" in app.permission.get()
+        app._start()
+        assert pump_until(app, lambda: app.status.get().startswith("監視中"), 4)
+        assert app.recycle_box.instate(["disabled"])
+        assert not app.rows_by_id
+        assert previous.exists()  # Existing scans are ignored.
+        app._stop()
+        assert pump_until(app, lambda: not app.worker.is_alive(), 4)
+        assert not app.gate.armed
+        assert app.gate.direct_authorized_printer is None
     finally:
         app._close()
         try:
