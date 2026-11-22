@@ -22,7 +22,11 @@
 - [GitHub Actions #45008059073](https://github.com/moyashimisosoup/black-cut-auto-print/actions/runs/45008059073)：Linux単体**67 PASS**、仮想Tk GUI**8 PASS**（warning 1）。直接許可・旧画像無印刷・原本安全な処理を含む。
 - [M2 pipeline CI #45008059074](https://github.com/moyashimisosoup/black-cut-auto-print/actions/runs/45008059074)：Linux/Windowsの合成試験成功。
 - [更新バッチCI #45008059052](https://github.com/moyashimisosoup/black-cut-auto-print/actions/runs/45008059052)：Windowsの照合正常/不一致テスト成功。
-- Windowsの未署名EXE生成・更新ZIP/SHA・Artifactはビルド結果と読戻しを確認後に追記。
+- [GitHub Actions #45008059073](https://github.com/moyashimisosoup/black-cut-auto-print/actions/runs/45008059073)：Linux単体67件＋Xvfb仮想GUI8件PASS（警告1）、Windows単体67件PASS、未署名PyInstaller EXE生成とパッケージSHA検査PASS。
+- [旧M4互換 CI #45008059084](https://github.com/moyashimisosoup/black-cut-auto-print/actions/runs/45008059084)：Linux/Windows合格。
+- Windows Artifact `APP033-v0.7.2-rc.1-QuickArm-Recycle-Windows`（ID `14748970685`）を`APP033-v0.7.2-rc.1-QuickArm-Recycle-Windows.zip`として読戻し。サイズ`75,763,078` bytes、SHA-256 `c7b85d59b67d857a0dada9fca76dfefd8dabc1ad4197339e8b1032c79aa367cb`。
+- ZIPは**7ファイルすべてCRC PASS**。EXE `76,295,623` bytes・MZヘッダー、SHA-256 `a0143c72f89309dbe4904dd1c397bace318fe4fb993d7043fa5fa205be1fed87`が`new_exe_sha256.txt`と一致、`VERSION.txt`は`v0.7.2-rc.1`。
+- **実機のCanon MF244dwの排紙・WindowsのPRINTEDフラグ・ごみ箱移動は未確認**。
 
 ## 残工程
 
