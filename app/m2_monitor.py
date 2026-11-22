@@ -180,7 +180,10 @@ class ScanPipeline:
             if status == "PENDING" and now - first < 180:
                 continue
             if status == "PRINTED" and not self.stop.is_set():
-                outcome = recycler(source, self.inbox, fingerprint)
+                try:
+                    outcome = recycler(source, self.inbox, fingerprint)
+                except Exception:
+                    outcome = "SOURCE_RECYCLE_FAILED_RETAINED"
                 self.store.set(job_id, "SPOOLER_PRINTED", outcome, str(preview), spool_id)
             else:
                 outcome = "PRINT_UNCONFIRMED_SOURCE_RETAINED"
@@ -320,6 +323,9 @@ class InboxMonitor:
         # Deleted or renamed temp files must not remain pending.
         for missing in set(self.pending) - present:
             self.pending.pop(missing, None)
+        # Canon may reuse a scan name after the earlier file was recycled.
+        # Only reuse after it was observably absent; never reprint old files.
+        self.known_names.intersection_update(present)
         return outcomes
 
 
