@@ -330,9 +330,14 @@ class OperatorApp(tk.Tk):
             return
         page = {"portrait": "A4縦", "landscape": "A4横"}.get(orientation, "A4方向不明")
         applied_trim = report.get("trim_mm", 0)
-        warning = " / 端の文字欠損に注意" if applied_trim else ""
+        if report.get("trim_warning") == "TRIM_SKIPPED_NO_PAPER_BOUNDARY":
+            trim_label = f"追加カット{applied_trim}mmを指定、境界がなく未実行"
+        else:
+            trim_label = f"内側カット {applied_trim}mm"
+            if applied_trim:
+                trim_label += "（端の文字欠損に注意）"
         self.preview_info.set(
-            f"選択画像に適用済み：回転 {rotation}° / {page} / {mode} / 内側カット {applied_trim}mm{warning}"
+            f"選択画像に適用済み：回転 {rotation}° / {page} / {mode} / {trim_label}"
         )
 
     def _open_selected(self):
