@@ -1,8 +1,19 @@
 # 黒部分カット自動印刷機（Black Cut Auto Print）
 
-Canon MF244dwからWindows PCに保存されたスキャン画像を監視し、原稿の外側の黒・暗灰背景を除去して、A4用紙へ自動印刷するための個人用Windows常駐ユーティリティ（開発準備段階）です。
+Canon MF244dwからWindows PCに保存されたスキャン画像を監視し、原稿の外側の黒・暗灰背景を除去して、A4用紙へ自動印刷するための個人用Windows自動処理ユーティリティ（試作・実機未検収）です。
 
-**APP-ID：APP-033** ｜ **現在：M1画像処理PoCを実装済み（実画像レビュー待ち）・無人印刷未実装** ｜ **作成元：[App Factory Issue #22](https://github.com/moyashimisosoup/app-factory/issues/22)**
+**APP-ID：APP-033** ｜ **現在：統合実用版候補 [Draft PR #8](https://github.com/moyashimisosoup/black-cut-auto-print/pull/8)、v0.7.0-rc.1（実機での印刷検収待ち・main未統合）** ｜ **作成元：[App Factory Issue #22](https://github.com/moyashimisosoup/app-factory/issues/22)**
+
+## 統合実用版候補 v0.7.0-rc.1
+
+- [Windows実機での設定・印刷検収手順](docs/M7_AUTO_PRINT_ACCEPTANCE.md)
+- [統合PR #8](https://github.com/moyashimisosoup/black-cut-auto-print/pull/8)：段階別PR #1〜#7のコードをまとめた**実機検証待ちの候補**。コード・合成試験・評価用EXEと、実紙への印刷成功を区別する。
+- Canon MF Scan UtilityはJPEG保存・日付別サブフォルダOFF。受信フォルダの直下に新規JPEGが入ることを確認する。
+- Windows起動時にCanon MF240/MF244系の印刷キューを検出し、前回のキュー選択を候補として復元する。ただし**印刷の許可は復元しない**。
+- 固定回転、DPI、`nominal/fit`、内側カット0/1/2/3/5mmを設定。元画像を残して印刷なしで再加工できる。
+- **自動印刷を初めてONにする手順**：現在設定に一致するプレビュー→手動1枚試し刷り→本人が実紙の内容と部数を確認→「自動印刷を許可」→「監視を開始」。以後、稼働中の新しいJPEGをPC操作なしで最大1回ずつ送信する。
+- 以前の設定で作ったプレビュー、切り取りをスキップしたプレビュー、設定情報のない旧版プレビューでは印刷許可を成立させない。
+- 印刷エラー時には`HOLD`/`UNKNOWN`で止め、自動再送しない。再起動後の監視・自動印刷もOFFに戻す。
 
 ## 実現したい操作
 
@@ -12,7 +23,7 @@ Canon MF244dwからWindows PCに保存されたスキャン画像を監視し、
 4. 本アプリが新規受信を検知し、紙面を見つけ、紙面**外側だけ**を白くする。
 5. A4・片面・白黒・1部の印刷ジョブをWindowsドライバー経由で送信する。
 
-スキャン開始後のPC操作を不要にすることを目指します。Canon純正のスキャン保存経路は既存の動作確認済みですが、アプリによる画像加工・自動印刷・実機試験は**まだ実施していません**。
+スキャン開始後のPC操作を不要にすることを目指します。Canon純正のスキャン保存は利用者が確認済みです。M1では提供画像1例の画像処理、M2では模擬受信を確認しています。**Canon実機への自動印刷・排紙確認は未実施**です。
 
 ## 画像処理の必須条件
 
@@ -31,13 +42,72 @@ Canon MF244dwからWindows PCに保存されたスキャン画像を監視し、
 - 依存定義：[requirements-m1.txt](requirements-m1.txt)
 - 画像1枚を入力すると、候補紙面輪郭・保持マスク・外側白化画像・A4プレビューを保存します。
 - 2026-11-21にローカル環境で合成テスト8件成功。提供実スキャン1件でもプレビューを作成できました（目視検収は未実施）。
-- **スキャン監視、Windows印刷、常駐、EXEはまだありません。**
+- **M1単体は画像処理のみです。** 受信監視・Windows印刷API・GUI/EXEの後続実装はM2〜M4のDraft PRにあります。
+
+## M6｜内側カット量の調整（Draft PR #7）
+
+- [内側カット操作ガイド](docs/M6_TRIM_DEPTH.md)：0/1/2/3/5mmを選択。従来と同じ**0mmが既定**。
+- 紙面の検出マスクを四辺からmm単位で縮め、元の画像は変更せず新しいプレビューを生成。赤線は元境界、緑線は追加カット後の実際の保持領域。
+- 大きく削れすぎる原稿は`HOLD`、境界がない白い原稿では指定カットをスキップ。端の文字やページ番号も削る可能性があるので、必ず印刷OFFで画質確認。
+- 処理済み履歴には実際のmm設定を表示。回転・DPI・A4配置・カット深さを変えると、手動試し刷りに基づく自動印刷許可は失効。
+- 評価版`v0.6.2-preview.1`。Canon MF244dwの実紙への印刷は未検証。
+
+## 評価版のバージョン表示
+
+- Windowsタイトルバー：`黒カット印刷 v0.6.2-preview.1 | APP-033`。アプリ見出し・トレイにも同じ版数を表示。
+- 履歴を選択すると「そのプレビューに適用した回転角・A4縦横・nominal/fit」を表示。画面上の現在の設定値と、既に生成した画像の設定を混同しない。
+- 更新ZIP内の`VERSION.txt`にも版数を収録。以後、配布するEXEの内容変更時は`app/version_info.py`の版数を更新し、対応するビルド・CHECKPOINTを記録する。
+- `preview`は実機印刷の合格を意味しない。起動時の自動印刷はOFFのまま。
+
+## M6｜原稿回転の再加工とA4配置（Draft PR #5）
+
+- 過去の`READY_REVIEW`原稿を選び「選択原稿を再加工（印刷なし）」で、スキャンし直さず0/90/180/270度の回転を適用。元のJPEGも旧履歴も変更しない。
+- A4配置は`nominal`（DPI基準・拡大を抑える）と`fit`（用紙に合わせる）の2種。原稿形状と回転後の向きに応じて縦/横A4を選ぶ。
+- 「検出境界を見る」で紙面認識の赤い輪郭画像を確認できる。本文を欠損させかねない自動端トリム・OCR正立方向推定はまだ追加していない。
+- 再加工は**印刷APIを呼ばない**。回転・DPI・倍率設定変更では自動印刷許可を取り消す。
+- [操作手順](docs/M6_LAYOUT_REPROCESS.md)。ユーザー提示プレビューから今回の改善を立案したが、元画像による影の境界検収と印刷実機試験は未完了。
+
+## M5｜Windowsトレイ常駐（Draft PR #4）
+
+- [トレイ処理](app/m5_tray.py)を追加。Windows通知領域にモノクロアイコンを置き、ウィンドウの最小化から復帰、監視停止、アプリ終了を操作可能。
+- [トレイ利用手順](docs/M5_TRAY_SETUP.md)、[単体テスト](tests/test_m5_tray.py)、[仮想GUI試験](tests/test_m5_gui_tray.py)を用意。
+- トレイの別スレッドからTkやプリンターを直接操作しない。GUIのイベントキュー経由で指示し、停止時には無人印刷の許可を解除する。
+- 起動時は監視OFF・自動印刷OFFを維持。トレイが利用できないPCでは通常のウィンドウから監視・停止できる。
+- [M5 CHECKPOINT](docs/checkpoints/APP033_M5_TRAY_20261122.md)：8工程中6工程、工程ベース**75%**。**実紙印刷0件・正式版未確定**。
+- [M6実機受入検査シート](docs/M6_HARDWARE_ACCEPTANCE.md)：Windows/Canonで検証する項目を整理。現時点ではすべて未判定。
+- [M5 GitHub Actions](https://github.com/moyashimisosoup/black-cut-auto-print/actions/workflows/m5-tray-build.yml)でLinux/Xvfbの**47件PASS（単体42件・GUI5件）**を確認。[Windows/Linux CI #44928835667](https://github.com/moyashimisosoup/black-cut-auto-print/actions/runs/44928835667)成功。Windows単体42件PASS、未署名のトレイ対応EXEを生成しZIP整合性を確認済み。
+
+## M4｜印刷対応オペレーター画面（Draft PR #3・実機未検収）
+
+- [操作画面](app/m4_operator_ui.py)：受信フォルダ、印刷先選択、回転・DPI設定、監視ON/OFF、ジョブ履歴、A4プレビュー、1枚の手動試し刷り、自動印刷許可・停止。
+- [印刷許可ゲート](app/m4_print_gate.py)：起動時は必ずOFF。**試し刷りの紙を本人が確認したことを、その起動中だけ記録**し、さらに別の確認操作後に自動印刷ONを許可。再起動・プリンター変更で失効。
+- [M4操作ガイド](docs/M4_OPERATOR_GUIDE.md)と[合成テスト](tests/test_m4_print_gate.py)を追加。Tkinterを仮想ディスプレイで起動するGUI試験、モックの手動試し刷り→自動印刷送信試験を追加。
+- [M4 CI](https://github.com/moyashimisosoup/black-cut-auto-print/actions/workflows/m4-operator-build.yml)：[Linux/Windows CI成功](https://github.com/moyashimisosoup/black-cut-auto-print/actions/runs/44905758141)。Linux単体38件＋仮想GUI3件、Windows単体38件がPASS。
+- Windows用評価EXE `BlackCutPrintCandidate.exe` をCIで生成。[Actions Artifact](https://github.com/moyashimisosoup/black-cut-auto-print/actions/runs/44905758141)に7日保存。ZIPをダウンロードして破損がないこと、EXEのWindows PEヘッダを確認済み。
+- **自動印刷の実機試験・排紙検収は行っていません。** Draft PRはmainへ統合しません。
+
+## M3｜プレビュー専用GUI（印刷OFF固定・開発用）
+
+- [画面ソース](app/m3_preview_ui.py)、[操作ガイド](docs/M3_PREVIEW.md)、[検証CHECKPOINT](docs/checkpoints/APP033_M3_PREVIEW_20261121.md)を追加。
+- Windows 11向けの**署名なし確認用EXE**を[GitHub Actions run #44902861132](https://github.com/moyashimisosoup/black-cut-auto-print/actions/runs/44902861132)でビルド済み（Artifactsに保存、7日保持）。
+- 「受信フォルダ」「保存先」「回転角」を設定し、監視ON/OFF、処理状態、直近A4プレビューを表示。画像処理にはM1/M2を再利用。
+- Linux仮想デスクトップでGUI監視→合成JPEG受信→プレビュー作成→停止を確認。Windows実機でのexe起動・Canonスキャンはまだ未検証。
+- GUIからの印刷は**機能自体が存在しない**。M2の実紙検収まで無人印刷には移行しない。
+
+## M2監視・Windows印刷パイプライン（Draft PR・未統合）
+
+- [監視・ジョブ状態管理](app/m2_monitor.py)：新着JPEGを検知、M1でA4加工、SQLite＋OSプロセスロックで二重送信を抑止。
+- [Windows印刷アダプター](app/windows_print.py)：正確なプリンターキューにA4・片面・白黒・1部を要求。物理寸法・向き・オフラインを検査。
+- [M2使い方](docs/M2_SETUP.md)：初期設定、ドライラン、明示的な手動試し刷り、自動印刷ONの順。
+- [M2 CHECKPOINT](docs/checkpoints/APP033_M2_DRAFT_20261121.md)。
+- Linux/Windows CIのM1+M2合成テスト26件PASS、提供実スキャン1件で監視→A4プレビュー生成→再起動後の重複なしを確認（印刷命令は送っていない）。
+- **[Windows/Linux GitHub Actions CI成功](https://github.com/moyashimisosoup/black-cut-auto-print/actions/runs/44902661481)。** Windows実機印刷・ユーザーの原稿目視検収は未確認のため、Draft PRをmainに統合しない。
 
 ## 技術方針（設計段階）
 
 - Windows 11、Canon MF244dw、MF Scan Utility
-- Python 3.13（候補）、OpenCV、Pillow、watchdog、pywin32、PyInstaller
-- ローカルの専用受信フォルダをイベント監視。保存完了確認後に処理。
+- Python 3.13、OpenCV、Pillow、pywin32、PyInstaller。watchdogは検討のみで現時点では未採用
+- ローカルの専用受信フォルダを非再帰ポーリング監視（約0.8秒間隔）。JPEG安定・検証後に処理。
 - ジョブ状態を永続化し、監視切替・再起動・印刷失敗による二重送信を防ぐ。
 - オフライン完結を基本とし、認証情報やスキャン本文を外部送信しない。
 - Windows印刷スプーラーが受け付けたことと、用紙が正常に排出されたことは区別する。
@@ -54,9 +124,11 @@ Canon MF244dwからWindows PCに保存されたスキャン画像を監視し、
 
 - **M1：画像処理PoC**：実原稿をローカルで用い、紙面境界・外側白化・A4プレビューを作り品質を検証。印刷はOFF。
 - **M2：印刷パイプライン**：監視ON/OFF、保存完了待ち、状態管理、Windows印刷と安全な保留を接続。
-- **M3：常駐EXE**：最小UI・トレイ常駐・導入手順・実機での受入確認。
+- **M3：プレビュー専用GUI**：印刷OFFで受信と加工結果を確認。
+- **M4：自動印刷対応GUI**：手動試し刷り・実紙確認・明示ON/OFF、安全な履歴を実装。
+- **M5：タスクトレイ常駐**：最小化中も監視を維持。トレイから復帰・停止・終了を操作。
 
-現時点でM1の処理コードのみがあり、Windows EXE・無人印刷・GitHub Pages公開URLはありません。Webアプリ化より、無人印刷可能なローカル常駐アプリを優先します。
+M1はmain、M2〜M6はDraft PR #1〜#7の段階的な成果、M7の総合実用版はDraft PR #8にまとめています。**Canon実紙印刷の合格が未確認なので正式版は未確定**。Webアプリ化より、無人印刷可能なローカル常駐アプリを優先します。
 
 ## 公開範囲
 

@@ -15,6 +15,8 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 
 MAX_PIXELS = 45_000_000
 A4_MM = (210, 297)
+TRIM_LEVELS_MM = (0, 1, 2, 3, 5)  # Small, explicit presets; zero is legacy-safe.
+
 
 
 @dataclass
@@ -27,6 +29,13 @@ class Detection:
     foreground_contrast: float | None = None
     source_dpi: float | None = None
     dpi_assumed: bool = False
+    rotation_degrees: int = 0
+    scale_mode: str = "nominal"
+    a4_orientation: str | None = None
+    trim_mm: float = 0.0
+    trim_pixels: int = 0
+    trim_retained_fraction: float | None = None
+    trim_warning: str | None = None
 
 
 def _load(path: Path) -> tuple[np.ndarray, float | None]:
@@ -156,12 +165,37 @@ def detect_and_clean(rgb: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarra
     return cleaned, mask, outline, report
 
 
+def trim_paper_edges(mask: np.ndarray, *, trim_mm: float, source_dpi: float) -> tuple[np.ndarray, int, float]:
+    """Shrink the *accepted paper mask* into the page, never alter source RGB.
+
+    A rectangular erosion at mm-to-pixel depth cuts all four sides. BORDER_CONSTANT
+    with zero padding also trims paper that touches the scan image edge.
+    """
+    if trim_mm not in TRIM_LEVELS_MM or not 72 <= source_dpi <= 1200:
+        raise ValueError("INVALID_TRIM_SETTINGS")
+    if trim_mm == 0:
+        return mask.copy(), 0, 1.0
+    before = int(cv2.countNonZero(mask))
+    if before == 0:
+        raise ValueError("EMPTY_PAPER_MASK")
+    pixels = max(1, round(trim_mm / 25.4 * source_dpi))
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2 * pixels + 1, 2 * pixels + 1))
+    adjusted = cv2.erode(mask, kernel, borderType=cv2.BORDER_CONSTANT, borderValue=0)
+    after = int(cv2.countNonZero(adjusted))
+    fraction = after / before
+    # Fail closed if the chosen margin leaves too little plausible paper.
+    if fraction < 0.70 or after == 0:
+        raise ValueError("TRIM_REMOVES_TOO_MUCH_PAPER")
+    return adjusted, pixels, fraction
+
+
 def _rotate(image: np.ndarray, degrees: int) -> np.ndarray:
     return np.rot90(image, (degrees // 90) % 4).copy() if degrees else image
 
 
-def layout_a4(cleaned: np.ndarray, mask: np.ndarray, output_dpi: int, source_dpi: float, rotation: int = 0) -> np.ndarray:
-    if output_dpi not in {150, 300} or rotation not in {0, 90, 180, 270}:
+def layout_a4(cleaned: np.ndarray, mask: np.ndarray, output_dpi: int, source_dpi: float,
+              rotation: int = 0, scale_mode: str = "nominal") -> np.ndarray:
+    if output_dpi not in {150, 300} or rotation not in {0, 90, 180, 270} or scale_mode not in {"nominal", "fit"}:
         raise ValueError("INVALID_OUTPUT_SETTINGS")
     ys, xs = np.where(mask > 0)
     if len(xs) == 0:
@@ -178,8 +212,10 @@ def layout_a4(cleaned: np.ndarray, mask: np.ndarray, output_dpi: int, source_dpi
     page_w, page_h = (round(mm_w / 25.4 * output_dpi), round(mm_h / 25.4 * output_dpi))
     inset = round(5 / 25.4 * output_dpi)
     usable_w, usable_h = page_w - 2 * inset, page_h - 2 * inset
-    scale = min(float(output_dpi) / source_dpi, usable_w / paper.shape[1], usable_h / paper.shape[0])
-    # Never enlarge beyond nominal physical dimensions by default.
+    fit_scale = min(usable_w / paper.shape[1], usable_h / paper.shape[0])
+    scale = min(float(output_dpi) / source_dpi, fit_scale) if scale_mode == "nominal" else fit_scale
+    # Nominal uses scan DPI (or a declared assumption); fit enlarges to paper.
+    # Neither mode attempts OCR or automatically infers upright text.
     if scale <= 0:
         raise ValueError("INVALID_SCALE")
     rw, rh = max(1, round(paper.shape[1] * scale)), max(1, round(paper.shape[0] * scale))
@@ -192,11 +228,15 @@ def layout_a4(cleaned: np.ndarray, mask: np.ndarray, output_dpi: int, source_dpi
     return cv2.cvtColor(gray, cv2.COLOR_GRAY2RGB)
 
 
-def process(path: Path, output_dir: Path, rotation: int = 0, output_dpi: int = 150, source_dpi: float | None = None) -> Detection:
-    if rotation not in {0, 90, 180, 270} or output_dpi not in {150, 300}:
+def process(path: Path, output_dir: Path, rotation: int = 0, output_dpi: int = 150,
+            source_dpi: float | None = None, scale_mode: str = "nominal",
+            trim_mm: float = 0) -> Detection:
+    if rotation not in {0, 90, 180, 270} or output_dpi not in {150, 300} or scale_mode not in {"nominal", "fit"}:
         raise ValueError("INVALID_OUTPUT_SETTINGS")
     if source_dpi is not None and not 72 <= source_dpi <= 1200:
         raise ValueError("INVALID_SOURCE_DPI")
+    if trim_mm not in TRIM_LEVELS_MM:
+        raise ValueError("INVALID_TRIM_SETTINGS")
     # Never confuse an earlier ACCEPT preview with a later HOLD result.
     # The caller must choose a fresh output directory for each scan.
     if output_dir.exists() and any(output_dir.iterdir()):
@@ -206,6 +246,9 @@ def process(path: Path, output_dir: Path, rotation: int = 0, output_dpi: int = 1
         cleaned, mask, outlined, report = detect_and_clean(image)
         report.dpi_assumed = source_dpi is None and embedded_dpi is None
         report.source_dpi = source_dpi or embedded_dpi or 300.0
+        report.rotation_degrees = rotation
+        report.scale_mode = scale_mode
+        report.trim_mm = float(trim_mm)
     except (ValueError, OSError, UnidentifiedImageError, cv2.error) as exc:
         report = Detection("HOLD", f"INPUT_ERROR:{type(exc).__name__}")
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -215,8 +258,35 @@ def process(path: Path, output_dir: Path, rotation: int = 0, output_dpi: int = 1
     Image.fromarray(outlined).save(output_dir / "boundary_overlay.png")
     Image.fromarray(mask).save(output_dir / "paper_mask.png")
     if report.status == "ACCEPT":
+        # 'Already light' has no reliable detected paper boundary to deepen.
+        # Keep the scan unchanged and tell the operator that trim was skipped.
+        if trim_mm and report.reason == "ALREADY_LIGHT_BACKGROUND":
+            report.trim_warning = "TRIM_SKIPPED_NO_PAPER_BOUNDARY"
+        elif trim_mm:
+            try:
+                inner_mask, report.trim_pixels, fraction = trim_paper_edges(
+                    mask, trim_mm=trim_mm, source_dpi=report.source_dpi)
+                report.trim_retained_fraction = round(fraction, 4)
+                mask = inner_mask
+                cleaned[mask == 0] = (255, 255, 255)
+                # Red is original inferred hull; green is the actual retained trim boundary.
+                marked = outlined.copy()
+                outlines, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                cv2.drawContours(marked, outlines, -1, (20, 225, 60),
+                                 thickness=max(2, min(mask.shape) // 350))
+                Image.fromarray(marked).save(output_dir / "trim_boundary_overlay.png")
+                report.trim_warning = "EDGE_CONTENT_MAY_BE_REMOVED"
+            except ValueError as exc:
+                report.status = "HOLD"
+                report.reason = str(exc)
+        # Store the actual retained mask, not the old expanded one.
+        Image.fromarray(mask).save(output_dir / "paper_mask.png")
+    if report.status == "ACCEPT":
         Image.fromarray(cleaned).save(output_dir / "cleaned.png")
-        preview = layout_a4(cleaned, mask, output_dpi, report.source_dpi, rotation)
+        ys, xs = np.where(mask > 0)
+        crop_landscape = (int(xs.max()) - int(xs.min())) > (int(ys.max()) - int(ys.min()))
+        report.a4_orientation = "landscape" if crop_landscape != (rotation in {90, 270}) else "portrait"
+        preview = layout_a4(cleaned, mask, output_dpi, report.source_dpi, rotation, scale_mode)
         Image.fromarray(preview).save(output_dir / "a4_preview.png", dpi=(output_dpi, output_dpi))
     (output_dir / "report.json").write_text(json.dumps(asdict(report), ensure_ascii=False, indent=2), encoding="utf-8")
     return report
@@ -229,10 +299,15 @@ def main() -> int:
     parser.add_argument("--rotate", type=int, choices=(0, 90, 180, 270), default=0)
     parser.add_argument("--output-dpi", type=int, choices=(150, 300), default=150)
     parser.add_argument("--source-dpi", type=float, help="If scan metadata lacks DPI, set a calibrated value; default assumes 300 DPI")
+    parser.add_argument("--scale-mode", choices=("nominal", "fit"), default="nominal",
+                        help="nominal: do not enlarge beyond source physical size; fit: fill A4 printable area")
+    parser.add_argument("--trim-mm", type=float, choices=TRIM_LEVELS_MM, default=0,
+                        help="optional inner-page trim in millimeters; 0 keeps full legacy paper mask")
     args = parser.parse_args()
     if args.input.resolve().is_relative_to(args.output.resolve()):
         parser.error("Input must not be inside the output directory")
-    result = process(args.input, args.output, args.rotate, args.output_dpi, args.source_dpi)
+    result = process(args.input, args.output, args.rotate, args.output_dpi,
+                     args.source_dpi, args.scale_mode, args.trim_mm)
     print(json.dumps(asdict(result), ensure_ascii=False, indent=2))
     return 0 if result.status == "ACCEPT" else 2
 

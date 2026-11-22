@@ -15,12 +15,14 @@
 - 1スキャンにつき印刷ジョブ送信は最大1回。スプーラー送信成功と印刷完了は区別する。
 - 元原稿を上書きせず、結果・原因・処理状態を再確認できるようにする。
 
-## 最初の作業：M1
-- Pythonで1枚の入力画像から候補紙面・検出マスク・A4プレビューを出す最小PoCを作る。
-- 閾値固定、最大白領域だけ、最外周1pxのflood fillだけの設計にしない。
-- 四辺黒、部分的な黒、白枠、暗灰、見開き中央影、紙面が端に接する入力を検証する。
-- 使用者提供の実スキャンはローカルでのみ使用する。GitHubには追加しない。
-- 自動印刷はM1合格まで無効にする。
+## 現段階（v0.7.0-rc.1 統合実用版候補 / 実紙検収待ち）
+
+- M1はmain、M2〜M6は段階別のDraft PR #1〜#7に保存。統合候補：[Draft PR #8](https://github.com/moyashimisosoup/black-cut-auto-print/pull/8)（base：main）。**mainへのマージはまだ行わない**。
+- [M7実機検収手順](docs/M7_AUTO_PRINT_ACCEPTANCE.md)と[ROADMAP](docs/ROADMAP.md)の最新状態を最初に確認する。
+- 画像の回転/DPI/nominal-fit/内側カット量を変えると自動印刷許可が解除される。試し刷りに使う画像はレポートから現設定と一致を確認する。
+- プリンター候補の表示や前回の選択を復元するだけでは無人印刷をONにできない。再起動時には監視・印刷の許可をOFFにする。
+- Windowsでの合成試験とEXE生成を本番合格と混同しない。**Canon MF244dw実紙A4片面1部→連続3回→停止・オフライン**を実機で検収するまではRC扱い。
+- 元の書籍の画像・ログ・Windowsの実パスはPublic Repoへ格納しない。実機試験から得られた問題と診断値のみ、安全な範囲で記録する。
 
 ## 実装上の境界
 - Python・OpenCV・Pillow・watchdog・pywin32等を候補とするが、依存は最小限にして実測で選ぶ。
@@ -38,4 +40,4 @@
 ## 参考
 - [App Factory申請 Issue #22](https://github.com/moyashimisosoup/app-factory/issues/22)
 - [Session Deck全体台帳](https://github.com/moyashimisosoup/session-deck/blob/main/docs/APP_PORTFOLIO.md)
-- 作業範囲：APP-033 / M1→M3
+- 作業範囲：APP-033 / 統合版候補 M7・実機受入
