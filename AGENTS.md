@@ -15,13 +15,14 @@
 - 1スキャンにつき印刷ジョブ送信は最大1回。スプーラー送信成功と印刷完了は区別する。
 - 元原稿を上書きせず、結果・原因・処理状態を再確認できるようにする。
 
-## 現段階（M5試験済み、M6実機ゲート待ち）
-- M1画像処理PoCはmain。M2 PR #1→M3 PR #2→M4 PR #3→M5 PR #4は連鎖するDraftで保持する。
-- [M5 CHECKPOINT](docs/checkpoints/APP033_M5_TRAY_20261122.md)と[ROADMAP](docs/ROADMAP.md)の最新状態・証拠を読んでから続行する。
-- **M5 Linux単体42件＋仮想GUI5件、Windows単体42件と評価EXEビルド成功**。ただしCanon実紙印刷・WindowsユーザーPCでの起動は未検証。
-- M6ではスキャンの外周・紙面内保全・DPI/倍率、A4/片面/白黒/1部、停止・オフライン・二重送信をWindows実機で確認する。
-- M6の結果なしに印刷機能の安全性を「本番検収済み」としない。PR #1→#2→#3→#4のmain統合・正式配布は別ゲート。
-- 紙の確認に基づく印刷許可は再起動時に失効する。ユーザーの実物を見ないCIや仮想試験で代わりに承認してはならない。
+## 現段階（v0.7.0-rc.1 統合実用版候補 / 実紙検収待ち）
+
+- M1はmain、M2〜M6は段階別のDraft PR #1〜#7に保存。統合候補：[Draft PR #8](https://github.com/moyashimisosoup/black-cut-auto-print/pull/8)（base：main）。**mainへのマージはまだ行わない**。
+- [M7実機検収手順](docs/M7_AUTO_PRINT_ACCEPTANCE.md)と[ROADMAP](docs/ROADMAP.md)の最新状態を最初に確認する。
+- 画像の回転/DPI/nominal-fit/内側カット量を変えると自動印刷許可が解除される。試し刷りに使う画像はレポートから現設定と一致を確認する。
+- プリンター候補の表示や前回の選択を復元するだけでは無人印刷をONにできない。再起動時には監視・印刷の許可をOFFにする。
+- Windowsでの合成試験とEXE生成を本番合格と混同しない。**Canon MF244dw実紙A4片面1部→連続3回→停止・オフライン**を実機で検収するまではRC扱い。
+- 元の書籍の画像・ログ・Windowsの実パスはPublic Repoへ格納しない。実機試験から得られた問題と診断値のみ、安全な範囲で記録する。
 
 ## 実装上の境界
 - Python・OpenCV・Pillow・watchdog・pywin32等を候補とするが、依存は最小限にして実測で選ぶ。
@@ -39,4 +40,4 @@
 ## 参考
 - [App Factory申請 Issue #22](https://github.com/moyashimisosoup/app-factory/issues/22)
 - [Session Deck全体台帳](https://github.com/moyashimisosoup/session-deck/blob/main/docs/APP_PORTFOLIO.md)
-- 作業範囲：APP-033 / M1→M3
+- 作業範囲：APP-033 / 統合版候補 M7・実機受入
