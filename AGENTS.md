@@ -15,12 +15,14 @@
 - 1スキャンにつき印刷ジョブ送信は最大1回。スプーラー送信成功と印刷完了は区別する。
 - 元原稿を上書きせず、結果・原因・処理状態を再確認できるようにする。
 
-## 現段階（v0.7.1-rc.1 許可操作改善RC / 実紙検収待ち）
+## 現段階（v0.7.2-rc.1 直接許可・受信原稿整理RC / 実機検収待ち）
 
 - M1はmain、M2〜M6はDraft PR #1〜#7。統合候補は[Draft PR #8](https://github.com/moyashimisosoup/black-cut-auto-print/pull/8)（base：main）、許可ボタンの操作順改善は[Draft PR #9](https://github.com/moyashimisosoup/black-cut-auto-print/pull/9)（base：#8のブランチ）。**mainへのマージはまだ行わない**。
 - [M7実機検収手順](docs/M7_AUTO_PRINT_ACCEPTANCE.md)と[ROADMAP](docs/ROADMAP.md)の最新状態を最初に確認する。
 - 画像の回転/DPI/nominal-fit/内側カット量を変えると自動印刷許可が解除される。試し刷りに使う画像はレポートから現設定と一致を確認する。
 - プリンター候補の表示や前回の選択を復元するだけでは無人印刷をONにできない。再起動時には監視・印刷の許可をOFFにする。
+- ユーザーが明示的に③から試し刷りを省略する場合は確認ダイアログを要する。検証済みと取り違えない。[決定ADR-010/011](docs/M7_QUICK_ARM_AND_CLEANUP.md)。
+- 「元JPEGをごみ箱へ」既定ONは新規印刷対象のみ。WindowsスプーラーのPRINTED通知がない限り消さず、パス・元画像指紋を確認。元画像の無条件削除や完全削除はしない。
 - Windowsでの合成試験とEXE生成を本番合格と混同しない。**Canon MF244dw実紙A4片面1部→連続3回→停止・オフライン**を実機で検収するまではRC扱い。
 - 元の書籍の画像・ログ・Windowsの実パスはPublic Repoへ格納しない。実機試験から得られた問題と診断値のみ、安全な範囲で記録する。
 
