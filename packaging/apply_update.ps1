@@ -10,7 +10,8 @@ $Manifest = Join-Path $PSScriptRoot 'new_exe_sha256.txt'
 $AllowedNames = @('BlackCutPrintTrayCandidate.exe', 'BlackCutPrintCandidate.exe')
 $OldHashes = @(
     '466a3396b9b92ca25d28c6fad90b9ad0f8d52601cbed906ca20c6f173e8351f3', # M5 initial
-    '160348312759e418f8117022e9e295d1a0f748ff51fe0de622578a47338a91b7'  # M4 initial
+    '160348312759e418f8117022e9e295d1a0f748ff51fe0de622578a47338a91b7', # M4 initial
+    'ff04b5cd14066d8a366115a46a979aa726ad514880a01722c7d7ab4016f9108b'  # M5 path fix v1/v2
 )
 $Stage = $null
 $Backup = $null
@@ -57,7 +58,7 @@ try {
         exit 0
     }
     if ($OldHashes -notcontains $OldHash) {
-        throw 'Existing EXE SHA256 does not match an approved APP-033 M4/M5 build. No files changed.'
+        throw 'Existing EXE SHA256 does not match an approved APP-033 M4/M5 or path-fix build. No files changed.'
     }
     $Backup = "$Target.backup-before-APP033-path-fix.exe"
     $Stage = "$Target.APP033-incoming.tmp"
