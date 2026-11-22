@@ -274,9 +274,16 @@ class InboxMonitor:
 
 
 def _paths_safe(inbox: Path, output: Path) -> bool:
-    if inbox == output:
-        return False
-    return not (inbox in output.parents or output in inbox.parents)
+    """Prevent the nonrecursive inbox from receiving our generated files.
+
+    A sibling output or parent of the inbox (even a drive root) is safe:
+    InboxMonitor only reads direct children of the designated inbox.
+    Output *inside* the inbox is not safe: the monitor could see outputs
+    and future formats as incoming scans.
+    """
+    inbox = inbox.resolve()
+    output = output.resolve()
+    return output != inbox and inbox not in output.parents
 
 
 def run_cli(argv: list[str] | None = None) -> int:
@@ -323,7 +330,7 @@ def run_cli(argv: list[str] | None = None) -> int:
         p.error("source DPI must be 72..1200")
     inbox, output = args.inbox.resolve(), args.output.resolve()
     if not inbox.is_dir() or not _paths_safe(inbox, output):
-        p.error("inbox must exist; output must be separate and not nested")
+        p.error("inbox must exist; output cannot equal or be inside inbox")
     output.mkdir(parents=True, exist_ok=True)
     stop = threading.Event()
 

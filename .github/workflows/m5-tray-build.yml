@@ -1,0 +1,81 @@
+name: M5 Windows tray operator candidate
+
+on:
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'tests/**'
+      - 'requirements-m5-windows.txt'
+      - 'packaging/**'
+      - '.github/workflows/m5-tray-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-synthetic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install processing and virtual display dependencies
+        run: |
+          python -m pip install -r requirements-m1.txt
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb
+      - name: Compile and core tests (no printer)
+        run: |
+          python -m compileall -q app
+          python -m pytest -q tests/test_m1_processing.py tests/test_m2_monitor.py tests/test_windows_print_contract.py tests/test_m4_print_gate.py tests/test_m5_tray.py
+      - name: Tk virtual display scans, simulation and tray integration
+        run: xvfb-run -a python -m pytest -q tests/test_m4_ui.py tests/test_m4_simulated_workflow.py tests/test_m5_gui_tray.py
+
+  windows-build:
+    needs: linux-synthetic
+    runs-on: windows-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install Windows dependencies and PyInstaller
+        run: python -m pip install -r requirements-m5-windows.txt "pyinstaller>=6.11,<7"
+      - name: Syntax and Windows imports
+        run: |
+          python -m compileall -q app
+          python -c "import tkinter, pystray, win32print, win32gui, win32con; print('Windows imports OK')"
+      - name: Core unit tests without printer hardware
+        run: python -m pytest -q tests/test_m1_processing.py tests/test_m2_monitor.py tests/test_windows_print_contract.py tests/test_m4_print_gate.py tests/test_m5_tray.py
+      - name: Build Windows tray candidate only
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name BlackCutPrintTrayCandidate --paths app --hidden-import pystray._win32 app/m4_operator_ui.py
+      - name: Check unsigned EXE and hash
+        shell: pwsh
+        run: |
+          if (!(Test-Path 'dist/BlackCutPrintTrayCandidate.exe')) { throw 'EXE missing' }
+          Get-Item 'dist/BlackCutPrintTrayCandidate.exe' | Select-Object Name,Length
+          Get-FileHash 'dist/BlackCutPrintTrayCandidate.exe' -Algorithm SHA256
+      - name: Assemble verified Windows update package
+        shell: pwsh
+        run: |
+          New-Item -Path 'dist/update_package' -ItemType Directory -Force | Out-Null
+          Copy-Item 'dist/BlackCutPrintTrayCandidate.exe' 'dist/update_package/BlackCutPrintTrayCandidate.exe'
+          Copy-Item 'packaging/apply_update.bat' 'dist/update_package/apply_update.bat'
+          Copy-Item 'packaging/apply_update.ps1' 'dist/update_package/apply_update.ps1'
+          Copy-Item 'packaging/VERIFY_PACKAGE.bat' 'dist/update_package/VERIFY_PACKAGE.bat'
+          Copy-Item 'packaging/UPDATE_README.txt' 'dist/update_package/UPDATE_README.txt'
+          (Get-FileHash 'dist/update_package/BlackCutPrintTrayCandidate.exe' -Algorithm SHA256).Hash.ToLowerInvariant() |
+            Set-Content -Path 'dist/update_package/new_exe_sha256.txt' -Encoding ascii -NoNewline
+          powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "dist/update_package/apply_update.ps1" -CheckPackageOnly
+          if ($LASTEXITCODE -ne 0) { throw 'SHA256 manifest package verification failed' }
+          Get-ChildItem 'dist/update_package' | Select-Object Name, Length
+      - uses: actions/upload-artifact@v4
+        with:
+          name: APP033-M5-PathFix-UpdatePackage
+          path: dist/update_package/
+          if-no-files-found: error
+          retention-days: 7
