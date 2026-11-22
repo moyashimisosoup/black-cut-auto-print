@@ -41,8 +41,8 @@ class OperatorApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(window_title())
-        self.geometry("760x680")
-        self.minsize(650, 590)
+        self.geometry("760x715")
+        self.minsize(650, 625)
         self.worker: threading.Thread | None = None
         self.manual_worker: threading.Thread | None = None
         self.reprocess_worker: threading.Thread | None = None
@@ -57,6 +57,7 @@ class OperatorApp(tk.Tk):
         self.rotation = tk.StringVar(value="0")
         self.source_dpi = tk.StringVar(value="300")
         self.scale_mode = tk.StringVar(value="nominal")
+        self.trim_mm = tk.StringVar(value="0")
         self.printer = tk.StringVar()
         self.status = tk.StringVar(value="停止中・自動印刷OFF")
         self.permission = tk.StringVar(value="自動印刷：OFF（手動試し刷り未確認）")
@@ -64,7 +65,7 @@ class OperatorApp(tk.Tk):
         self._load_settings()
         self._draw()
         self.printer.trace_add("write", self._printer_changed)
-        for setting in (self.rotation, self.source_dpi, self.scale_mode):
+        for setting in (self.rotation, self.source_dpi, self.scale_mode, self.trim_mm):
             setting.trace_add("write", self._layout_changed)
         # Starts hidden tray companion, but never starts scan monitoring
         # or restores any print authorization.
@@ -111,6 +112,16 @@ class OperatorApp(tk.Tk):
         self.scale_combo = ttk.Combobox(options, textvariable=self.scale_mode,
                                         values=("nominal", "fit"), width=9, state="readonly")
         self.scale_combo.pack(side="left")
+        ttk.Label(fields, text="追加の内側カット").grid(row=4, column=0, sticky="w", pady=5)
+        trim_options = ttk.Frame(fields)
+        trim_options.grid(row=4, column=1, sticky="w", padx=8, pady=5)
+        self.trim_combo = ttk.Combobox(trim_options, textvariable=self.trim_mm,
+                                       values=("0", "1", "2", "3", "5"), width=6, state="readonly")
+        self.trim_combo.pack(side="left")
+        ttk.Label(trim_options, text="mm（0=従来 / 1=浅い / 3=深い / 5=強い）",
+                  foreground="#555555").pack(side="left", padx=9)
+        ttk.Label(container, text="注意：内側カットは本文・ページ番号も削る可能性があります。印刷OFFで再加工して確認してください。",
+                  foreground="#8b4513").pack(anchor="w", pady=(2, 0))
         ttk.Label(container, text="nominal=原寸優先（DPI基準） / fit=用紙に合わせて拡大・縮小",
                   foreground="#666666").pack(anchor="w", pady=(4, 0))
         ttk.Separator(container).pack(fill="x", pady=(10, 10))
@@ -191,6 +202,8 @@ class OperatorApp(tk.Tk):
                 self.source_dpi.set(str(data["source_dpi"]))
             if data.get("scale_mode") in {"nominal", "fit"}:
                 self.scale_mode.set(data["scale_mode"])
+            if str(data.get("trim_mm", 0)) in {"0", "1", "2", "3", "5"}:
+                self.trim_mm.set(str(data["trim_mm"]))
             # Never restore print permissions or selected queue from disk.
         except (OSError, ValueError, TypeError, KeyError):
             pass
@@ -201,13 +214,13 @@ class OperatorApp(tk.Tk):
             self.config_file.write_text(json.dumps({
                 "inbox": self.inbox.get(), "output": self.output.get(),
                 "rotation": self.rotation.get(), "source_dpi": self.source_dpi.get(),
-                "scale_mode": self.scale_mode.get(),
+                "scale_mode": self.scale_mode.get(), "trim_mm": self.trim_mm.get(),
             }, indent=2, ensure_ascii=False), encoding="utf-8")
         except OSError:
             self._log("設定を保存できませんでした。")
 
     def _layout_changed(self, *_):
-        # Changing rotation, DPI or scaling invalidates a previous paper test.
+        # Changing rotation, DPI, scaling or trimming invalidates the paper test.
         if self.gate.verified_printer or self.gate.armed or self.gate.waiting_for_paper:
             self.gate.manual_failed()
             self._log("用紙設定の変更により、以前の試し刷り確認を無効化しました。")
@@ -239,7 +252,7 @@ class OperatorApp(tk.Tk):
                                      not self.gate.waiting_for_paper else "disabled")
         self.reprocess_button.configure(state="normal" if idle and not busy and
                                         not self.gate.waiting_for_paper else "disabled")
-        for combo in (self.rotation_combo, self.dpi_combo, self.scale_combo):
+        for combo in (self.rotation_combo, self.dpi_combo, self.scale_combo, self.trim_combo):
             combo.configure(state="readonly" if idle and not busy and
                             not self.gate.waiting_for_paper else "disabled")
 
@@ -316,8 +329,10 @@ class OperatorApp(tk.Tk):
             self.preview_info.set("プレビュー情報：旧版のため適用設定は不明")
             return
         page = {"portrait": "A4縦", "landscape": "A4横"}.get(orientation, "A4方向不明")
+        applied_trim = report.get("trim_mm", 0)
+        warning = " / 端の文字欠損に注意" if applied_trim else ""
         self.preview_info.set(
-            f"選択画像に適用済み：回転 {rotation}°（反時計回り） / {page} / {mode}"
+            f"選択画像に適用済み：回転 {rotation}° / {page} / {mode} / 内側カット {applied_trim}mm{warning}"
         )
 
     def _open_selected(self):
@@ -340,7 +355,10 @@ class OperatorApp(tk.Tk):
         if not record or not record.get("preview_path"):
             messagebox.showinfo("境界画像なし", "加工済みの履歴を選択してください。", parent=self)
             return
-        diagnostic = Path(record["preview_path"]).parent / "boundary_overlay.png"
+        folder = Path(record["preview_path"]).parent
+        diagnostic = folder / "trim_boundary_overlay.png"
+        if not diagnostic.is_file():
+            diagnostic = folder / "boundary_overlay.png"
         if not diagnostic.is_file():
             messagebox.showinfo("境界画像なし", "このジョブには検出境界画像がありません。", parent=self)
             return
@@ -372,26 +390,28 @@ class OperatorApp(tk.Tk):
             rotation = int(self.rotation.get())
             dpi = float(self.source_dpi.get())
             mode = self.scale_mode.get()
-            if mode not in ("nominal", "fit") or rotation not in (0, 90, 180, 270) or not 72 <= dpi <= 1200:
+            trim = float(self.trim_mm.get())
+            if (trim not in (0, 1, 2, 3, 5) or mode not in ("nominal", "fit") or
+                    rotation not in (0, 90, 180, 270) or not 72 <= dpi <= 1200):
                 raise ValueError("回転・DPI・A4配置が正しくありません")
         except (OSError, ValueError) as exc:
             messagebox.showerror("再加工できません", str(exc), parent=self)
             return
         # Reprocessing changes the preview, invalidating ANY prior paper test.
         self.gate.manual_failed()
-        self._log(f"印刷せず再加工します：回転{rotation}度、A4 {mode}")
+        self._log(f"印刷せず再加工します：回転{rotation}度、A4 {mode}、内側カット{trim}mm")
         self.status.set("選択した原稿を再加工中（印刷OFF）")
         self.reprocess_worker = threading.Thread(
-            target=self._run_reprocess, args=(source, output, rotation, dpi, mode),
+            target=self._run_reprocess, args=(source, output, rotation, dpi, mode, trim),
             daemon=True)
         self.reprocess_worker.start()
         self._sync_gate_controls()
 
-    def _run_reprocess(self, source, output, rotation, dpi, mode):
+    def _run_reprocess(self, source, output, rotation, dpi, mode, trim):
         try:
             from m6_preview import reprocess_preview
             state, job_id = reprocess_preview(source, output, rotation=rotation,
-                                              source_dpi=dpi, scale_mode=mode)
+                                              source_dpi=dpi, scale_mode=mode, trim_mm=trim)
             self.notifications.put(("reprocessed", (state, job_id)))
         except Exception as exc:
             self.notifications.put(("reprocess_error", f"{type(exc).__name__}: {exc}"))
@@ -491,8 +511,9 @@ class OperatorApp(tk.Tk):
             if rotation not in (0, 90, 180, 270) or not 72 <= dpi <= 1200:
                 raise ValueError("回転か読取解像度の指定が無効です")
             mode = self.scale_mode.get()
-            if mode not in ("nominal", "fit"):
-                raise ValueError("A4配置設定が無効です")
+            trim = float(self.trim_mm.get())
+            if mode not in ("nominal", "fit") or trim not in (0, 1, 2, 3, 5):
+                raise ValueError("A4配置か追加カット量が無効です")
             printer = self.printer.get()
             armed = self.gate.will_submit(printer)
             if armed:
@@ -513,12 +534,12 @@ class OperatorApp(tk.Tk):
         self.status.set("監視を開始しています" + ("（自動印刷ON）" if armed else "（印刷OFF）"))
         self.worker = threading.Thread(
             target=self._run_monitor,
-            args=(inbox, output, rotation, dpi, mode, printer, armed, self.stop_event),
+            args=(inbox, output, rotation, dpi, mode, trim, printer, armed, self.stop_event),
             daemon=True,
         )
         self.worker.start()
 
-    def _run_monitor(self, inbox, output, rotation, dpi, mode, printer, armed, stop):
+    def _run_monitor(self, inbox, output, rotation, dpi, mode, trim, printer, armed, stop):
         lock = None
         store = None
         try:
@@ -530,7 +551,7 @@ class OperatorApp(tk.Tk):
                 sender = submit_a4
             pipeline = ScanPipeline(store, output, printer=printer, armed=armed,
                                     sender=sender, source_dpi=dpi, rotate=rotation,
-                                    scale_mode=mode, stop=stop)
+                                    scale_mode=mode, trim_mm=trim, stop=stop)
             monitor = InboxMonitor(inbox, pipeline)
             self.notifications.put(("status", "監視中（印刷ON）" if armed else "監視中（印刷OFF）"))
             while not stop.is_set():
