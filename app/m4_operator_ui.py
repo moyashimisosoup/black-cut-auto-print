@@ -259,31 +259,64 @@ class OperatorApp(tk.Tk):
         self._sync_gate_controls()
 
     def _sync_gate_controls(self):
+        """Keep the numbered approval steps consistent with the existing print gate."""
         armed = self.gate.will_submit(self.printer.get())
+        verified = bool(self.gate.verified_printer and
+                        self.gate.verified_printer == self.printer.get())
         if armed:
             self.permission.set("自動印刷：ON（監視中の新規原稿のみ）")
-        elif self.gate.verified_printer == self.printer.get() and self.gate.verified_printer:
+        elif verified:
             self.permission.set("自動印刷：OFF（試し刷り確認済み・許可ボタンで再開できます）")
         else:
             self.permission.set("自動印刷：OFF（今回の起動での手動印刷確認が必要）")
-        idle = not (self.worker and self.worker.is_alive())
-        available = self.gate.verified_printer == self.printer.get() and idle and not (
-            self.reprocess_worker and self.reprocess_worker.is_alive())
-        self.arm_button.configure(state="normal" if available and not armed else "disabled")
-        self.disarm_button.configure(state="normal" if armed and idle else "disabled")
-        busy = bool((self.manual_worker and self.manual_worker.is_alive()) or
-                    (self.reprocess_worker and self.reprocess_worker.is_alive()))
+
+        monitoring = bool(self.worker and self.worker.is_alive())
+        manual_busy = bool(self.manual_worker and self.manual_worker.is_alive())
+        reprocess_busy = bool(self.reprocess_worker and self.reprocess_worker.is_alive())
+        busy = manual_busy or reprocess_busy
+        waiting = self.gate.waiting_for_paper
+        idle = not monitoring
+
         self.manual_button.configure(state="normal" if idle and not armed and
-                                     not busy and not self.gate.waiting_for_paper and
+                                     not busy and not waiting and
                                      not self.gate.pending_printer else "disabled")
-        self.verify_button.configure(state="normal" if self.gate.waiting_for_paper and idle else "disabled")
+        self.verify_button.configure(state="normal" if waiting and idle else "disabled")
+        self.arm_button.configure(state="normal" if verified and idle and
+                                  not busy and not waiting and not armed else "disabled")
+        self.start_button.configure(
+            text="④ 監視開始（自動印刷）" if armed else "監視のみ開始（印刷OFF）",
+            state="normal" if idle and not busy and not waiting else "disabled")
+        self.stop_button.configure(
+            state="normal" if monitoring and not self.stop_event.is_set() else "disabled")
+        self.disarm_button.configure(state="normal" if armed and idle else "disabled")
         self.printer_combo.configure(state="readonly" if idle and not busy and
-                                     not self.gate.waiting_for_paper else "disabled")
+                                     not waiting else "disabled")
         self.reprocess_button.configure(state="normal" if idle and not busy and
-                                        not self.gate.waiting_for_paper else "disabled")
+                                        not waiting else "disabled")
         for combo in (self.rotation_combo, self.dpi_combo, self.scale_combo, self.trim_combo):
             combo.configure(state="readonly" if idle and not busy and
-                            not self.gate.waiting_for_paper else "disabled")
+                            not waiting else "disabled")
+
+        if monitoring:
+            if self.stop_event.is_set():
+                hint = "監視を停止しています。終了後に①試し刷りなどの操作ができます。"
+            elif armed:
+                hint = "④ 自動印刷の監視中です。変更・試し刷りは「監視を停止」してから。"
+            else:
+                hint = "印刷OFFで監視中です。①試し刷りをするには先に「監視を停止」。"
+        elif manual_busy:
+            hint = "① 試し刷りを送信中です。実際に紙が出たら②で確認してください。"
+        elif reprocess_busy:
+            hint = "原稿を再加工中です。完了後にプレビューを確認してください。"
+        elif waiting:
+            hint = "次は②：Canonから出た紙の内容・向き・部数を確認して押してください。"
+        elif armed:
+            hint = "③ 自動印刷を許可済みです。次は④「監視開始（自動印刷）」。"
+        elif verified:
+            hint = "② 実紙確認が完了しました。次は③「自動印刷を許可」。"
+        else:
+            hint = "原稿を選び、今の設定で再加工・プレビュー確認後、①「1枚試し刷り」。"
+        self.workflow_hint.set(hint)
 
     def _list_printers(self):
         if self.worker and self.worker.is_alive():
