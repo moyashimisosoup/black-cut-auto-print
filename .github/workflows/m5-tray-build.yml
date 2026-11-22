@@ -66,6 +66,7 @@ jobs:
           Copy-Item 'dist/BlackCutPrintTrayCandidate.exe' 'dist/update_package/BlackCutPrintTrayCandidate.exe'
           Copy-Item 'packaging/apply_update.bat' 'dist/update_package/apply_update.bat'
           Copy-Item 'packaging/apply_update.ps1' 'dist/update_package/apply_update.ps1'
+          Copy-Item 'packaging/VERIFY_PACKAGE.bat' 'dist/update_package/VERIFY_PACKAGE.bat'
           Copy-Item 'packaging/UPDATE_README.txt' 'dist/update_package/UPDATE_README.txt'
           (Get-FileHash 'dist/update_package/BlackCutPrintTrayCandidate.exe' -Algorithm SHA256).Hash.ToLowerInvariant() |
             Set-Content -Path 'dist/update_package/new_exe_sha256.txt' -Encoding ascii -NoNewline
