@@ -53,13 +53,14 @@ def test_preview_reprocessing_is_not_a_print_and_old_job_is_untouched(tmp_path, 
                         lambda *_args, **_kwargs: pytest.fail("unexpected print"))
 
     first_state, first = reprocess_preview(source, output, rotation=90,
-                                           source_dpi=300, scale_mode="fit")
+                                           source_dpi=300, scale_mode="fit", trim_mm=1)
     assert first_state == "READY_REVIEW"
     with Image.open(output / "jobs" / first / "a4_preview.png") as preview:
         assert preview.width > preview.height
     report = json.loads((output / "jobs" / first / "report.json").read_text())
     assert report["rotation_degrees"] == 90
     assert report["scale_mode"] == "fit"
+    assert report["trim_mm"] == 1.0
     assert report["a4_orientation"] == "landscape"
 
     second_state, second = reprocess_preview(source, output, rotation=270,

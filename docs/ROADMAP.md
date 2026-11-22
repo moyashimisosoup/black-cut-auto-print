@@ -59,6 +59,13 @@ APP-033／2026-11-21 JST 時点。正式設計の正本は [詳細仕様書v0.3]
 - [x] [Windows CI #44928835667](https://github.com/moyashimisosoup/black-cut-auto-print/actions/runs/44928835667)で単体42件PASS、pystray対応EXEを生成、Artifact ID 14715669994に保存。ZIPのCRC・Windows PE確認済み。
 - [ ] Windows実機でトレイ最小化・復帰・停止・終了を検収。
 
+## M6：追加の内側カット深さ（Draft PR #7）
+
+- [x] 原稿の外側マスクを0/1/2/3/5mmで内側へ縮小する設定を追加、既定0mmは従来同等。
+- [x] 元境界（赤）と保持境界（緑）の診断画像、元画像保全、別ジョブへのプレビュー再生成。
+- [x] 設定変更で印刷許可失効。過剰切除時はHOLD、紙面輪郭がない場合はスキップ。
+- [ ] 実機の同じ原稿で0/1/2/3/5mmを比較し、ページ番号・文字・図版が欠損しないことを目視検収。
+
 ## M6：Canon実機・画質検収（ユーザーのWindows環境が必要）
 
 - [x] [M6画像配置改善 Draft PR #5](https://github.com/moyashimisosoup/black-cut-auto-print/pull/5)：過去の原稿を回転指定で再加工・印刷OFFのプレビュー保存、原寸優先/用紙フィットの明示選択、赤い境界診断画面。元画像・旧ジョブは上書きしない。
