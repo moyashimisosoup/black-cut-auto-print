@@ -2,7 +2,13 @@
 
 Canon MF244dwからWindows PCに保存されたスキャン画像を監視し、原稿の外側の黒・暗灰背景を除去して、A4用紙へ自動印刷するための個人用Windows自動処理ユーティリティ（試作・実機未検収）です。
 
-**APP-ID：APP-033** ｜ **現在：統合実用版候補 [Draft PR #8](https://github.com/moyashimisosoup/black-cut-auto-print/pull/8)、v0.7.0-rc.1（実機での印刷検収待ち・main未統合）** ｜ **作成元：[App Factory Issue #22](https://github.com/moyashimisosoup/app-factory/issues/22)**
+**APP-ID：APP-033** ｜ **現在：統合版v0.7.0-rc.1 [Draft PR #8](https://github.com/moyashimisosoup/black-cut-auto-print/pull/8)、v0.7.0-rc.1（実機での印刷検収待ち・main未統合）** ｜ **作成元：[App Factory Issue #22](https://github.com/moyashimisosoup/app-factory/issues/22)**
+
+## v0.7.1-rc.1｜自動印刷の許可手順を横一列に整理
+
+「① 1枚試し刷り → ② 紙の結果を確認 → ③ 自動印刷を許可 → ④ 監視開始（自動印刷）」を**履歴の下にひとまとめ**にし、次にする操作を状態別に案内。許可前の④は「監視のみ開始（印刷OFF）」と表示して、試し刷り未確認でも安全に画像加工だけ行える。監視中の停止・無人印刷OFFは別段に分離。
+
+[手順と安全条件](docs/M7_AUTO_PRINT_ACCEPTANCE.md) / [版数付きDraft PR（予定）](https://github.com/moyashimisosoup/black-cut-auto-print/pulls)
 
 ## 統合実用版候補 v0.7.0-rc.1
 
