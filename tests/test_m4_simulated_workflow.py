@@ -2,6 +2,7 @@
 
 THIS TEST NEVER SENDS ANY PRINT JOB. It only tests UI wiring and state gates.
 """
+import json
 import sys
 import time
 from pathlib import Path
@@ -35,6 +36,11 @@ def test_mocked_manual_proof_then_auto_submit(monkeypatch, tmp_path):
     image = output / "jobs" / "manual" / "a4_preview.png"
     image.parent.mkdir(parents=True)
     Image.new("RGB", (1240, 1754), "white").save(image)
+    (image.parent / "report.json").write_text(json.dumps({
+        "status": "ACCEPT", "rotation_degrees": 0,
+        "scale_mode": "nominal", "a4_orientation": "portrait",
+        "source_dpi": 300.0, "trim_mm": 0
+    }), encoding="utf-8")
 
     store = m2_monitor.JobStore(output / "jobs.sqlite3")
     job = store.claim("synthetic-ready-preview", tmp_path / "sample-source.jpg")
