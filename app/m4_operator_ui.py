@@ -183,8 +183,8 @@ class OperatorApp(tk.Tk):
         ttk.Separator(container).pack(fill="x", pady=5)
         self.log = tk.Text(container, height=5, state="disabled", font=("Consolas", 9), wrap="word")
         self.log.pack(fill="both", expand=False)
-        ttk.Label(container, text="自動印刷の手順：印刷先選択 → 現設定で再加工 → 1枚試し刷り → 実紙確認 → 自動印刷許可 → 監視開始",
-                  foreground="#555555").pack(anchor="w", pady=(3, 0))
+        ttk.Label(container, text="自動印刷：印刷先選択 → 同じ設定で再加工 → 1枚試し刷り → 紙を確認 → 許可 → 監視開始",
+                  foreground="#555555", wraplength=710).pack(anchor="w", pady=(3, 0))
         ttk.Label(container, text="再起動後の自動印刷許可は無効。印刷完了・紙排出は別々に確認します。",
                   foreground="#666666").pack(anchor="w", pady=(9, 0))
         self._refresh_history()
