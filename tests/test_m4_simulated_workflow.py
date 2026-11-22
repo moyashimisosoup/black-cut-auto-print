@@ -84,7 +84,7 @@ def test_mocked_manual_proof_then_auto_submit(monkeypatch, tmp_path):
         assert "監視のみ開始（印刷OFF）" == app.start_button.cget("text")
         assert "①" in app.workflow_hint.get()
         assert app.verify_button.instate(["disabled"])
-        assert app.arm_button.instate(["disabled"])
+        assert app.arm_button.instate(["!disabled"])  # user can deliberately bypass trial
         # Initial state must never submit just because a preview exists.
         assert not app.gate.armed
         app._manual_test()
