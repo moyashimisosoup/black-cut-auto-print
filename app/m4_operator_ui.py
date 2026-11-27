@@ -21,6 +21,7 @@ from m5_tray import TrayController
 from print_preflight import check_preview_for_print, PreviewMismatch
 from printer_preferences import prefer_canon_queue
 from version_info import version_label, window_title
+from desktop_updater import DesktopUpdater, update_allowed
 
 
 def preview_history(output: Path, limit: int = 75) -> list[dict]:
@@ -62,6 +63,10 @@ class OperatorApp(tk.Tk):
         self.scale_mode = tk.StringVar(value="nominal")
         self.trim_mm = tk.StringVar(value="0")
         self.recycle_after_print = tk.BooleanVar(value=True)
+        self.auto_update_check = tk.BooleanVar(value=True)
+        self.auto_update_install = tk.BooleanVar(value=False)
+        self.update_status = tk.StringVar(value="更新：署名付きインストール版で利用可能")
+        self.updater = None
         self.printer = tk.StringVar()
         self.status = tk.StringVar(value="停止中・自動印刷OFF")
         self.permission = tk.StringVar(value="自動印刷：OFF（手動試し刷り未確認）")
@@ -85,6 +90,10 @@ class OperatorApp(tk.Tk):
             self._log("トレイ機能を起動できません。画面の監視・停止は利用できます。")
         self.after(200, self._events)
         self.protocol("WM_DELETE_WINDOW", self._close)
+        self.updater = DesktopUpdater(lambda kind, value: self.notifications.put((kind, value)))
+        self._sync_gate_controls()
+        if self.updater.available:
+            self.after(1500, self._startup_update)
 
     def _draw(self):
         container = ttk.Frame(self, padding=16)
@@ -94,6 +103,21 @@ class OperatorApp(tk.Tk):
         ttk.Label(heading, text="黒カット印刷", font=("Yu Gothic UI", 17, "bold")).pack(side="left")
         ttk.Label(heading, text=version_label(), font=("Yu Gothic UI", 10),
                   foreground="#555555").pack(side="left", padx=(12, 0))
+        self.update_button = ttk.Button(heading, text="更新を確認", command=self._check_update,
+                                        state="disabled")
+        self.update_button.pack(side="right")
+        update_row = ttk.Frame(container)
+        update_row.pack(fill="x", pady=(2, 0))
+        self.auto_update_box = ttk.Checkbutton(update_row, text="起動時に更新を確認",
+                                               variable=self.auto_update_check,
+                                               command=self._update_preference)
+        self.auto_update_box.pack(side="left")
+        self.auto_install_box = ttk.Checkbutton(update_row, text="自動更新（確認省略）",
+                                               variable=self.auto_update_install,
+                                               command=self._update_preference)
+        self.auto_install_box.pack(side="left", padx=8)
+        ttk.Label(container, textvariable=self.update_status,
+                  foreground="#555555").pack(anchor="w")
         ttk.Label(container, text="新規スキャンを自動加工。手動の紙検収が終わるまで無人印刷はOFFです。",
                   foreground="#555555").pack(anchor="w", pady=(2, 12))
         fields = ttk.Frame(container)
@@ -236,6 +260,12 @@ class OperatorApp(tk.Tk):
                 self.trim_mm.set(str(data["trim_mm"]))
             if type(data.get("recycle_after_print", True)) is bool:
                 self.recycle_after_print.set(data.get("recycle_after_print", True))
+            if type(data.get("auto_update_check", True)) is bool:
+                self.auto_update_check.set(data.get("auto_update_check", True))
+            if type(data.get("auto_update_install", False)) is bool:
+                self.auto_update_install.set(data.get("auto_update_install", False))
+            if not self.auto_update_check.get():
+                self.auto_update_install.set(False)
             self._preferred_printer = str(data.get("last_printer", ""))[:240]
             # Previous queue is only a selection preference. Print permission is NEVER restored.
         except (OSError, ValueError, TypeError, KeyError):
@@ -250,6 +280,8 @@ class OperatorApp(tk.Tk):
                 "scale_mode": self.scale_mode.get(), "trim_mm": self.trim_mm.get(),
                 "last_printer": self.printer.get(),
                 "recycle_after_print": self.recycle_after_print.get(),
+                "auto_update_check": self.auto_update_check.get(),
+                "auto_update_install": self.auto_update_install.get(),
             }, indent=2, ensure_ascii=False), encoding="utf-8")
         except OSError:
             self._log("設定を保存できませんでした。")
@@ -330,6 +362,58 @@ class OperatorApp(tk.Tk):
         else:
             hint = "①試し刷り→②紙確認→③許可、または③から直接許可→④監視開始。未確認の印刷は自己承認です。"
         self.workflow_hint.set(hint)
+        self._sync_update_controls()
+
+    def _update_idle(self):
+        return update_allowed(
+            monitoring=bool(self.worker and self.worker.is_alive()),
+            manual=bool(self.manual_worker and self.manual_worker.is_alive()),
+            reprocessing=bool(self.reprocess_worker and self.reprocess_worker.is_alive()),
+            waiting=bool(self.gate.waiting_for_paper),
+            pending=bool(self.gate.pending_printer),
+            armed=bool(self.gate.armed),
+            exiting=self.pending_exit)
+
+    def _update_active(self):
+        return bool(self.updater and self.updater.active)
+
+    def _sync_update_controls(self):
+        available = bool(self.updater and self.updater.available)
+        active = self._update_active()
+        self.update_button.configure(state="normal" if available and
+                                     self._update_idle() and not active else "disabled")
+        self.auto_update_box.configure(state="normal" if available and not active else "disabled")
+        self.auto_install_box.configure(state="normal" if available and not active and
+                                        self.auto_update_check.get() else "disabled")
+        if not available:
+            self.update_status.set("更新：署名付きインストール版で利用可能")
+        if active:
+            for button in (self.manual_button, self.verify_button, self.arm_button,
+                           self.start_button, self.reprocess_button):
+                button.configure(state="disabled")
+            self.workflow_hint.set("更新確認中です。印刷・監視は停止しています。")
+
+    def _update_preference(self):
+        if not self.auto_update_check.get():
+            self.auto_update_install.set(False)
+        elif self.auto_update_install.get():
+            if not messagebox.askyesno("自動更新の確認",
+                    "起動時に署名検証済みの新版があれば、更新の確認を省略してインストールします。印刷・監視中には更新しません。設定を有効にしますか？", parent=self):
+                self.auto_update_install.set(False)
+        self._save_settings()
+        self._sync_gate_controls()
+
+    def _startup_update(self):
+        if self.auto_update_check.get():
+            self._check_update(interactive=False, auto_install=self.auto_update_install.get())
+
+    def _check_update(self, interactive=True, auto_install=False):
+        if not self.updater or not self.updater.available or not self._update_idle():
+            return
+        self._save_settings()
+        if self.updater.check(interactive=interactive, auto_install=auto_install):
+            self.update_status.set("更新を確認中…")
+        self._sync_gate_controls()
 
     def _list_printers(self):
         if self.worker and self.worker.is_alive():
@@ -453,6 +537,8 @@ class OperatorApp(tk.Tk):
             messagebox.showerror("開けません", str(exc), parent=self)
 
     def _reprocess_selected(self):
+        if self._update_active():
+            return
         """Manual-only preview from the stored original; never invoke a printer."""
         if ((self.worker and self.worker.is_alive()) or
                 (self.manual_worker and self.manual_worker.is_alive()) or
@@ -500,6 +586,8 @@ class OperatorApp(tk.Tk):
             self.notifications.put(("reprocess_error", f"{type(exc).__name__}: {exc}"))
 
     def _manual_test(self):
+        if self._update_active():
+            return
         if (self.worker and self.worker.is_alive()) or (self.reprocess_worker and self.reprocess_worker.is_alive()):
             messagebox.showerror("処理中", "監視・再加工を停止してから試し刷りしてください。", parent=self)
             return
@@ -559,6 +647,8 @@ class OperatorApp(tk.Tk):
         self._sync_gate_controls()
 
     def _arm(self):
+        if self._update_active():
+            return
         if ((self.worker and self.worker.is_alive()) or
                 (self.reprocess_worker and self.reprocess_worker.is_alive()) or
                 (self.manual_worker and self.manual_worker.is_alive()) or
@@ -576,6 +666,8 @@ class OperatorApp(tk.Tk):
                       "誤った向き・余白、紙詰まり・複数印刷に注意してください。\n\n"
                       "試し刷りを省略して、自分で自動印刷を許可しますか？")
         if not printer or not messagebox.askyesno("自動印刷を明示許可", prompt, parent=self):
+            return
+        if self._update_active() or self.pending_exit:
             return
         try:
             from windows_print import list_printers
@@ -602,6 +694,8 @@ class OperatorApp(tk.Tk):
         self._sync_gate_controls()
 
     def _start(self):
+        if self._update_active():
+            return
         if (self.worker and self.worker.is_alive()) or (self.reprocess_worker and self.reprocess_worker.is_alive()):
             return
         try:
@@ -692,6 +786,11 @@ class OperatorApp(tk.Tk):
         self.lift()
 
     def _finish_exit(self) -> None:
+        if self.updater:
+            try:
+                self.updater.close()
+            except Exception:
+                pass
         self.tray.stop()
         self.destroy()
 
@@ -713,6 +812,19 @@ class OperatorApp(tk.Tk):
                     name, result = value
                     self._log(f"{name}: {result}")
                     self._refresh_history()
+                elif typ == "update_found":
+                    self.update_status.set("新版あり：更新画面を確認")
+                elif typ == "update_result":
+                    labels = {"did_not_find_update": "更新なし", "error": "更新確認に失敗",
+                              "update_cancelled": "更新を中止", "update_skipped": "更新をスキップ",
+                              "update_postponed": "更新を延期", "update_dismissed": "更新を延期"}
+                    self.update_status.set(labels.get(str(value), "更新確認終了"))
+                elif typ == "update_error":
+                    self._log(str(value))
+                elif typ == "update_shutdown":
+                    self._save_settings()
+                    self._close()
+                    return
                 elif typ == "cleanup":
                     name, outcome = value
                     if outcome == "SOURCE_RECYCLED":
