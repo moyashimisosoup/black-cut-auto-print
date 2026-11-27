@@ -142,11 +142,12 @@ class DesktopUpdater:
     def active(self):
         return self.reservation.active
 
-    def check(self, *, interactive=True):
+    def check(self, *, interactive=True, auto_install=False):
         if not self.available or not self.reservation.begin():
             return False
         try:
-            method = "check_update_with_ui" if interactive else "check_update_without_ui"
+            method = ("check_update_with_ui_and_install" if auto_install else
+                      "check_update_with_ui" if interactive else "check_update_without_ui")
             self._fn(method)()
             return True
         except Exception:
