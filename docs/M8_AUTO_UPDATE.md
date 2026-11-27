@@ -29,3 +29,23 @@
 6. 実機の更新 A→B と既存コピー機能の回帰検証後に署名付き更新元を公開する。評価用ZIPは自動配信しない。
 
 公開鍵が空、DLL欠落、管理インストール外の場合は自動更新を無効化する。現時点では秘密鍵・署名済み配信物・稼働中feedがないため、設定項目は実装しても配信を有効にできない。WinSparkleの署名とWindows Authenticodeは別である。自動更新の完了を報告するのは実機A→B成功後とする。
+
+## 実装ファイルと配信準備
+
+- app/desktop_updater.py: WinSparkle 0.9.4 の公式APIへのctypes接続、初回鍵なしでは停止、状態排他。
+- app/update_identity.py: 公開鍵（初期空）、ビルド番号70301、固定HTTPS feed。
+- app/m4_operator_ui.py: 保存可能な自動確認・自動適用、本人同意、印刷操作排他。Windowsの単一起動mutexを追加。
+- packaging/build_managed.ps1: 公式x64 DLLと照合済みSHA256、公式ライセンス、公開鍵、Inno Setupコンパイラのパスを受け取り、管理版EXE/インストーラーをビルド。秘密鍵は不要。ローカル作業コピーにのみ公開鍵を注入し、Repoの初期空鍵を保持。
+- packaging/managed.iss: ユーザー権限の固定インストール先。アプリ終了を最大60秒待ち、強制終了しない。終了後、新版を起動。
+- tests/test_desktop_updater.py: モックDLL、未設定・ポータブル版の拒否、通常確認と自動適用APIの使い分け、全ビジー状態拒否、更新中の重複禁止。
+
+WinSparkle公式配布元: https://github.com/vslavik/winsparkle/releases/tag/v0.9.4
+Inno Setup: https://jrsoftware.org/isinfo.php
+
+管理版ビルド例（各パスとハッシュは実際の確認済み値を指定）:
+```powershell
+./packaging/build_managed.ps1 -PublicKey $publicKey -WinSparkleDll $dll -DllSha256 $verifiedSha256 -WinSparkleLicense $license -Iscc $iscc
+```
+署名鍵の生成と保全、公式DLLの実物確認、Inno Setupでのコンパイル、実際の署名済み更新A→B、公開feedの設定は未実施。CIのポータブル評価版にはDLL・公開鍵を組み込まない。未設定の機構を運用可能と称さない。
+
+appcastのインストーラー引数はWinSparkle公式記載のInno Setup向け /SILENT /SP- を基礎に、実機での終了待ちと再起動を検収して確定する。完全無表示を目指さず進捗とエラーは表示する。
