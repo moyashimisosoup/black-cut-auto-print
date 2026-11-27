@@ -44,8 +44,8 @@ class OperatorApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(window_title())
-        self.geometry("760x715")
-        self.minsize(650, 625)
+        self.geometry("780x765")
+        self.minsize(650, 675)
         self.worker: threading.Thread | None = None
         self.manual_worker: threading.Thread | None = None
         self.reprocess_worker: threading.Thread | None = None
@@ -397,9 +397,13 @@ class OperatorApp(tk.Tk):
         if not self.auto_update_check.get():
             self.auto_update_install.set(False)
         elif self.auto_update_install.get():
-            if not messagebox.askyesno("自動更新の確認",
-                    "起動時に署名検証済みの新版があれば、更新の確認を省略してインストールします。印刷・監視中には更新しません。設定を有効にしますか？", parent=self):
-                self.auto_update_install.set(False)
+            # A Tk modal processes timers: do not expose unchecked consent to
+            # the startup scheduler until the operator explicitly accepts.
+            self.auto_update_install.set(False)
+            accepted = messagebox.askyesno("自動更新の確認",
+                    "起動時に署名検証済みの新版があれば、更新の確認を省略してインストールします。印刷・監視中には更新しません。設定を有効にしますか？", parent=self)
+            if accepted and not self._update_active() and not self.pending_exit:
+                self.auto_update_install.set(True)
         self._save_settings()
         self._sync_gate_controls()
 
