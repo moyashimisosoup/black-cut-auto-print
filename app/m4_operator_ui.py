@@ -911,7 +911,24 @@ class OperatorApp(tk.Tk):
 
 
 def main():
-    OperatorApp().mainloop()
+    # A second desktop instance must not print while the managed executable
+    # is being replaced. The installer waits for this mutex to disappear.
+    mutex = None
+    if os.name == "nt":
+        import win32api
+        import win32event
+        import winerror
+        import ctypes
+        mutex = win32event.CreateMutex(None, False, r"Local\APP033-BlackCutPrint")
+        if win32api.GetLastError() == winerror.ERROR_ALREADY_EXISTS:
+            win32api.CloseHandle(mutex)
+            ctypes.windll.user32.MessageBoxW(None, "黒カット印刷は既に起動しています。", "黒カット印刷", 0x40)
+            return
+    try:
+        OperatorApp().mainloop()
+    finally:
+        if mutex is not None:
+            win32api.CloseHandle(mutex)
 
 
 if __name__ == "__main__":
