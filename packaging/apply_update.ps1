@@ -16,7 +16,8 @@ $OldHashes = @(
     'c27890c006b5a92c43fb058858c063fea0d399ee01d7211640171badd77cd4f1' , # v0.6.1-preview.1
     'f96abbd56eed25006e360bfae709603a52cb5a67f57db5ca32630b20315e852f' , # v0.6.2-preview.1 trim depth
     '431fdfb24224ebbcdfeba76913001927b12aa572aa85d9640b78eac668c69474', # v0.7.0-rc.1 integrated candidate
-    '11e58bed06bddc9f779e50fb341295bf1730871df2285b69cbb782798e374698' # v0.7.1-rc.1 approval UI
+    '11e58bed06bddc9f779e50fb341295bf1730871df2285b69cbb782798e374698', # v0.7.1-rc.1 approval UI
+    'a0143c72f89309dbe4904dd1c397bace318fe4fb993d7043fa5fa205be1fed87' # v0.7.2-rc.1
 )
 $Stage = $null
 $Backup = $null
