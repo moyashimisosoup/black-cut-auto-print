@@ -30,7 +30,7 @@ jobs:
       - name: Compile and core tests (no printer)
         run: |
           python -m compileall -q app
-          python -m pytest -q tests/test_m1_processing.py tests/test_m2_monitor.py tests/test_windows_print_contract.py tests/test_m4_print_gate.py tests/test_m5_tray.py tests/test_m6_preview.py tests/test_version_info.py tests/test_m6_trim.py tests/test_m7_auto_print.py tests/test_m7_quickarm_cleanup.py
+          python -m pytest -q tests/test_m1_processing.py tests/test_m2_monitor.py tests/test_windows_print_contract.py tests/test_m4_print_gate.py tests/test_m5_tray.py tests/test_m6_preview.py tests/test_version_info.py tests/test_m6_trim.py tests/test_m7_auto_print.py tests/test_m7_quickarm_cleanup.py tests/test_desktop_updater.py
       - name: Tk virtual display scans, simulation and tray integration
         run: xvfb-run -a python -m pytest -q tests/test_m4_ui.py tests/test_m4_simulated_workflow.py tests/test_m5_gui_tray.py tests/test_m6_gui.py
 
@@ -50,7 +50,7 @@ jobs:
           python -m compileall -q app
           python -c "import tkinter, pystray, win32print, win32gui, win32con; print('Windows imports OK')"
       - name: Core unit tests without printer hardware
-        run: python -m pytest -q tests/test_m1_processing.py tests/test_m2_monitor.py tests/test_windows_print_contract.py tests/test_m4_print_gate.py tests/test_m5_tray.py tests/test_m6_preview.py tests/test_version_info.py tests/test_m6_trim.py tests/test_m7_auto_print.py tests/test_m7_quickarm_cleanup.py
+        run: python -m pytest -q tests/test_m1_processing.py tests/test_m2_monitor.py tests/test_windows_print_contract.py tests/test_m4_print_gate.py tests/test_m5_tray.py tests/test_m6_preview.py tests/test_version_info.py tests/test_m6_trim.py tests/test_m7_auto_print.py tests/test_m7_quickarm_cleanup.py tests/test_desktop_updater.py
       - name: Build Windows tray candidate only
         run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name BlackCutPrintTrayCandidate --paths app --hidden-import pystray._win32 app/m4_operator_ui.py
       - name: Check unsigned EXE and hash
@@ -78,7 +78,7 @@ jobs:
           Get-ChildItem 'dist/update_package' | Select-Object Name, Length
       - uses: actions/upload-artifact@v4
         with:
-          name: APP033-v0.7.2-rc.1-QuickArm-Recycle-Windows
+          name: APP033-v0.7.3-rc.1-Portable-Windows
           path: dist/update_package/
           if-no-files-found: error
           retention-days: 7
