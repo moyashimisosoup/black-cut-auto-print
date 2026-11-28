@@ -55,3 +55,35 @@ def test_fingerprint_detects_mutation(tmp_path):
     path.write_bytes(b"not an exe")
     with pytest.raises(ValueError):
         module.fingerprint(path)
+
+
+@pytest.mark.parametrize("verify_result", [0, 1])
+def test_feed_requires_official_verification(tmp_path, monkeypatch, verify_result):
+    from types import SimpleNamespace
+
+    installer = tmp_path / "BlackCutPrint-Setup-0.7.4-rc.1.exe"
+    installer.write_bytes(b"MZfake")
+    tool = tmp_path / "winsparkle-tool.exe"
+    tool.touch()
+    key = tmp_path / "test.key"
+    key.touch()
+    output = tmp_path / "appcast.xml"
+    public_key = base64.b64encode(bytes(range(32))).decode("ascii")
+    calls = []
+
+    def fake_run(argv, **kwargs):
+        calls.append(argv)
+        if argv[1] == "sign":
+            return SimpleNamespace(returncode=0, stdout=SIG)
+        assert argv[1:] == ["verify", "--public-key", public_key,
+                            "--signature", SIG, str(installer)]
+        return SimpleNamespace(returncode=verify_result, stdout="")
+
+    monkeypatch.setattr(module, "identity", lambda: ("0.7.4-rc.1", "70401"))
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    result = module.main(["--installer", str(installer), "--tool", str(tool),
+                          "--private-key", str(key), "--public-key", public_key,
+                          "--previous-build", "70301", "--output", str(output)])
+    assert len(calls) == 2
+    assert result == verify_result
+    assert output.exists() == (verify_result == 0)
