@@ -13,7 +13,7 @@
 ## 2. ステージング A→B（公開不要）
 - 本人管理のHTTPS試験配信元を用意。証明書の検証を無効化しない。初期のfeedは更新無し。試験用鍵とURLで `packaging/build_managed.ps1` の通常引数に加え `-StagingFeedUrl $stagingFeed` を指定。出力は dist/managed-staging。正式配信へ転用禁止。
 - A/Bの APP_VERSION と BUILD_NUMBER は別々にし、Bは厳密に増加（例 A 0.7.3-rc.2 / 70302、B 0.7.3-rc.3 / 70303。既に使用済みの版なら次番号）。ビルド元とインストーラーSHAを記録。
-- Bと同じソースのcheckoutから `python packaging/prepare_appcast.py --installer $setupB --tool $tool --private-key $testKeyFile --previous-build 70302 --output $candidateXml`。新規appcast.xmlを生成する。署名は公式ツールで作成、生成コードは署名形式/ファイル名/ビルド番号/サイズ/署名前後SHAを確認するだけで署名検証はしない。実際のツールのstdout形式を確認する。
+- Bと同じソースのcheckoutから `python packaging/prepare_appcast.py --installer $setupB --tool $tool --private-key $testKeyFile --public-key $testPublicKey --previous-build 70302 --output $candidateXml`。新規appcast.xmlを生成する。署名は公式ツールで作成、生成コードは署名形式・ファイル名・ビルド番号・サイズを確認し、管理版に注入した公開鍵で公式 verify を実行、署名・検証前後のSHA一致を要求する。公式 v0.9.4 ソースのコマンドとstdout形式を照合済み、実行未検証。
 - 生成されるURLは本番版タグ用。試験時のみXMLのenclosure URLを本人管理HTTPSのB資産URLに差し替え、Bの実バイト・長さ・署名を変えず配信する。正式配信XMLとは別フォルダで管理する。
 - Aをインストールし、更新の自動適用を本人がONにして終了・再起動。Bのダウンロード、署名検証、A正常終了、Inno Setup、B再起動、更新設定の保持、印刷OFFを確認。監視中は更新しないことも確認。
 - 署名欠落、破損したB、別鍵のB、同版・旧版番号、オフライン、キャンセル、インストール失敗、設定/DB/画像保持、復旧再導入を確認。WinSparkleによるバージョン比較とインストーラーの実際の版は別。過去の正規署名済みインストーラーに偽の高いメタデータ版を付けるケースも拒否できるか試験する。未確認・拒否できない場合は本番配信HOLD（インストーラー自身のバージョンガードを設計）。手動復旧は本人の明示操作に限定。
@@ -29,3 +29,8 @@ Canon実機では③直接許可→④監視開始→新規スキャン3連続�
 
 参考: https://winsparkle.org/guides/getting-started/ , https://winsparkle.org/guides/publishing-updates/ , docs/M8_AUTO_UPDATE.md。
 判定: HOLD（署名配信・実機未検収）。main統合・公開未実施。次の1操作: 本人管理Windowsで公式DLL・ツールの真正性確認、試験鍵の準備、ステージング管理版Aのビルド。
+
+## 2026-11-29 追記：公式配布物の照合
+- [公式Release v0.9.4](https://github.com/vslavik/winsparkle/releases/tag/v0.9.4) API上のバイナリZIP SHA256: `6037df37fc263bd1650a1c4949681a9d40ffe991d01f35892a406cb5d103c976`。
+- `packaging/prepare_winsparkle.ps1 -Destination <Repo外の新規フォルダ>` が固定URLから取得し、アーカイブのSHA256一致後のみ展開、DLL/ツール/ライセンス候補と個別SHAを表示。Windowsでの実行未確認。
+- `packaging/prepare_appcast.py` は `--public-key` 必須。管理版に実際に組み込んだ公開鍵を指定し、公式 `verify` による検証が失敗した場合はXMLを出力しない。
