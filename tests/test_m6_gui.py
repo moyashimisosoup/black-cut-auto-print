@@ -32,7 +32,7 @@ def test_gui_reprocess_existing_scan_90_degrees_and_disarm(monkeypatch, tmp_path
     store.close()
 
     app = OperatorApp()
-    assert "v0.7.3-rc.1" in app.title()
+    assert "v0.7.4-rc.1" in app.title()
     app.withdraw()
     try:
         app.inbox.set(str(inbox))
