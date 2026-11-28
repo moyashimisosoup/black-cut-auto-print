@@ -7,6 +7,7 @@ remote services. Hardware validation remains a separate user-owned step.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 import os
 from pathlib import Path
 import queue
@@ -14,6 +15,7 @@ import sqlite3
 import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from PIL import Image, ImageTk
 
 from m2_monitor import InboxMonitor, JobStore, ScanPipeline, SingleInstance, _paths_safe
 from m4_print_gate import GateError, PrintGate
@@ -22,6 +24,20 @@ from print_preflight import check_preview_for_print, PreviewMismatch
 from printer_preferences import prefer_canon_queue
 from version_info import version_label, window_title
 from desktop_updater import DesktopUpdater, update_allowed
+
+
+JST = timezone(timedelta(hours=9), "JST")
+
+
+def format_jst(value):
+    """SQLite CURRENT_TIMESTAMP is UTC; only presentation is converted."""
+    try:
+        dt = datetime.fromisoformat(value)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(JST).strftime("%Y/%m/%d %H:%M:%S")
+    except (TypeError, ValueError, OverflowError):
+        return str(value or "")
 
 
 def preview_history(output: Path, limit: int = 75) -> list[dict]:
@@ -44,8 +60,8 @@ class OperatorApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(window_title())
-        self.geometry("780x765")
-        self.minsize(650, 675)
+        self.geometry("1000x850")
+        self.minsize(780, 720)
         self.worker: threading.Thread | None = None
         self.manual_worker: threading.Thread | None = None
         self.reprocess_worker: threading.Thread | None = None
@@ -54,6 +70,13 @@ class OperatorApp(tk.Tk):
         self.gate = PrintGate()
         self.rows_by_id: dict[str, dict] = {}
         self.pending_exit = False
+        self.monitor_armed = False
+        self.reprocess_after_stop = None
+        self.preview_mode = "processed"
+        self.preview_photo = None
+        self.preview_cache_key = None
+        self.compare_job = None
+        self.compare_result = None
         self.config_file = Path(os.environ.get("APPDATA") or str(Path.home())) / "BlackCutPrint" / "settings.json"
         self._preferred_printer = ""
         self.inbox = tk.StringVar()
@@ -174,14 +197,29 @@ class OperatorApp(tk.Tk):
                                             command=self._reprocess_selected)
         self.reprocess_button.pack(side="right", padx=8)
         columns = ("file", "state", "time")
-        self.tree = ttk.Treeview(container, columns=columns, show="headings", height=7, selectmode="browse")
+        history_area = ttk.Panedwindow(container, orient="horizontal")
+        history_area.pack(fill="both", expand=True)
+        history_pane = ttk.Frame(history_area)
+        image_pane = ttk.Frame(history_area)
+        history_area.add(history_pane, weight=3)
+        history_area.add(image_pane, weight=2)
+        self.tree = ttk.Treeview(history_pane, columns=columns, show="headings", height=7, selectmode="browse")
         self.tree.heading("file", text="原稿ファイル")
         self.tree.heading("state", text="状態")
-        self.tree.heading("time", text="更新日時")
-        self.tree.column("file", width=300, stretch=True)
-        self.tree.column("state", width=140, stretch=False)
-        self.tree.column("time", width=175, stretch=False)
-        self.tree.pack(fill="both", expand=True)
+        self.tree.heading("time", text="更新日時（JST）")
+        self.tree.column("file", width=165, minwidth=85, stretch=True)
+        self.tree.column("state", width=110, minwidth=75, stretch=False)
+        self.tree.column("time", width=150, minwidth=135, stretch=False)
+        scroll = ttk.Scrollbar(history_pane, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scroll.set)
+        scroll.pack(side="right", fill="y")
+        self.tree.pack(side="left", fill="both", expand=True)
+        self.preview_canvas = tk.Canvas(image_pane, background="#f4f4f4",
+                                        highlightthickness=0, width=300, height=210)
+        self.preview_canvas.pack(fill="both", expand=True, padx=(8, 0))
+        self.preview_caption = tk.StringVar(value="履歴から原稿を選択")
+        self.preview_canvas.bind("<Configure>", self._render_preview)
+        ttk.Label(image_pane, textvariable=self.preview_caption, wraplength=270).pack(anchor="w", padx=8)
         self.tree.bind("<Double-1>", lambda _event: self._open_selected())
         self.tree.bind("<<TreeviewSelect>>", self._update_preview_info)
         ttk.Label(container, textvariable=self.preview_info, foreground="#555555").pack(
@@ -190,10 +228,13 @@ class OperatorApp(tk.Tk):
         # Preview controls are separate from approval steps; viewing never prints.
         preview_actions = ttk.Frame(container)
         preview_actions.pack(fill="x", pady=(6, 5))
-        ttk.Button(preview_actions, text="選択したプレビューを開く",
+        ttk.Button(preview_actions, text="加工画像を表示",
                    command=self._open_selected).pack(side="left")
-        ttk.Button(preview_actions, text="検出境界を見る",
+        ttk.Button(preview_actions, text="検出境界を表示",
                    command=self._open_boundary).pack(side="left", padx=(8, 0))
+
+        ttk.Button(preview_actions, text="再加工前と比較",
+                   command=self._compare_previous).pack(side="left", padx=(8, 0))
 
         approval = ttk.LabelFrame(container, text="自動印刷の準備：左から①→④の順に操作",
                                   padding=(8, 6))
@@ -230,7 +271,7 @@ class OperatorApp(tk.Tk):
         ttk.Separator(container).pack(fill="x", pady=5)
         self.log = tk.Text(container, height=5, state="disabled", font=("Consolas", 9), wrap="word")
         self.log.pack(fill="both", expand=False)
-        ttk.Label(container, text="監視中は試し刷り・再加工を行えません。先に「監視を停止」を押してください。",
+        ttk.Label(container, text="印刷OFF監視中は再加工を選ぶと安全停止します。再開は手動で行ってください。",
                   foreground="#666666").pack(anchor="w", pady=(3, 0))
         self._refresh_history()
         self._sync_gate_controls()
@@ -335,8 +376,16 @@ class OperatorApp(tk.Tk):
         self.disarm_button.configure(state="normal" if armed and idle else "disabled")
         self.printer_combo.configure(state="readonly" if idle and not busy and
                                      not waiting else "disabled")
-        self.reprocess_button.configure(state="normal" if idle and not busy and
-                                        not waiting else "disabled")
+        self.reprocess_button.configure(state="normal" if not busy and not waiting and
+                                        not self.pending_exit and not self.reprocess_after_stop and
+                                        (idle or (not self.monitor_armed and not self.stop_event.is_set()))
+                                        else "disabled")
+        self.reprocess_button.configure(text="監視を停止して再加工" if monitoring else
+                                        "選択原稿を再加工（印刷なし）")
+        if self.reprocess_after_stop:
+            for button in (self.manual_button, self.verify_button, self.arm_button,
+                           self.start_button, self.reprocess_button):
+                button.configure(state="disabled")
         self.recycle_box.configure(state="normal" if idle and not busy else "disabled")
         for combo in (self.rotation_combo, self.dpi_combo, self.scale_combo, self.trim_combo):
             combo.configure(state="readonly" if idle and not busy and
@@ -372,7 +421,7 @@ class OperatorApp(tk.Tk):
             waiting=bool(self.gate.waiting_for_paper),
             pending=bool(self.gate.pending_printer),
             armed=bool(self.gate.armed),
-            exiting=self.pending_exit)
+            exiting=bool(self.pending_exit or self.reprocess_after_stop))
 
     def _update_active(self):
         return bool(self.updater and self.updater.active)
@@ -438,7 +487,7 @@ class OperatorApp(tk.Tk):
 
     def _log(self, line):
         self.log.configure(state="normal")
-        self.log.insert("end", line + "\n")
+        self.log.insert("end", f"[{datetime.now(JST):%Y/%m/%d %H:%M:%S} JST] {line}\n")
         self.log.see("end")
         self.log.configure(state="disabled")
 
@@ -468,7 +517,7 @@ class OperatorApp(tk.Tk):
         for row in rows:
             name = Path(row["source_path"]).name
             self.tree.insert("", "end", iid=row["id"],
-                             values=(name, row["state"], row["updated_at"]))
+                             values=(name, row["state"], format_jst(row["updated_at"])))
         if previous in self.rows_by_id:
             self.tree.selection_set(previous)
         self._update_preview_info()
@@ -479,6 +528,9 @@ class OperatorApp(tk.Tk):
 
     def _update_preview_info(self, _event=None):
         record = self._selected_row()
+        if self.preview_mode == "compare" and (not record or record["id"] != self.compare_result):
+            self.preview_mode = "processed"
+        self._render_preview()
         if not record or not record.get("preview_path"):
             self.preview_info.set("プレビュー情報：履歴を選択してください")
             return
@@ -506,46 +558,83 @@ class OperatorApp(tk.Tk):
             f"選択画像に適用済み：回転 {rotation}° / {page} / {mode} / {trim_label}"
         )
 
-    def _open_selected(self):
+    def _render_preview(self, _event=None):
+        if not hasattr(self, "preview_canvas"):
+            return
         record = self._selected_row()
-        if not record:
+        path = None
+        caption = "加工画像"
+        if self.preview_mode == "compare":
+            record = self.rows_by_id.get(self.compare_job)
+            caption = "再加工前の画像"
+        if record and record.get("preview_path"):
+            path = Path(record["preview_path"])
+            if self.preview_mode == "boundary":
+                caption = "検出境界（赤：検出 / 緑：保持）"
+                folder = path.parent
+                path = folder / "trim_boundary_overlay.png"
+                if not path.is_file():
+                    path = folder / "boundary_overlay.png"
+        canvas = self.preview_canvas
+        width, height = max(1, canvas.winfo_width()), max(1, canvas.winfo_height())
+        key = (str(path), self.preview_mode, width, height)
+        if key == self.preview_cache_key:
             return
-        preview = Path(record["preview_path"]) if record["preview_path"] else None
-        if not preview or not preview.is_file():
-            messagebox.showinfo("プレビューなし", "このジョブには印刷用プレビューがありません。", parent=self)
-            return
+        self.preview_cache_key = key
+        canvas.delete("all")
+        self.preview_photo = None
         try:
-            if os.name != "nt":
-                raise OSError("画像ビューアー起動はWindowsのみ")
-            os.startfile(str(preview))  # type: ignore[attr-defined]
-        except OSError as exc:
-            messagebox.showerror("開けません", str(exc), parent=self)
+            if path is None:
+                raise FileNotFoundError
+            with Image.open(path) as source:
+                source.thumbnail((max(1, width - 12), max(1, height - 12)), Image.Resampling.LANCZOS)
+                self.preview_photo = ImageTk.PhotoImage(source.copy(), master=self)
+            canvas.create_image(width // 2, height // 2, image=self.preview_photo)
+            self.preview_caption.set(caption)
+        except (OSError, ValueError, Image.DecompressionBombError):
+            canvas.create_text(width // 2, height // 2, text="表示できる画像がありません",
+                               fill="#666666", width=max(1, width - 16))
+            self.preview_caption.set(caption + "なし")
+
+    def _open_selected(self):
+        self.preview_mode = "processed"
+        self.preview_cache_key = None
+        self._render_preview()
 
     def _open_boundary(self):
+        self.preview_mode = "boundary"
+        self.preview_cache_key = None
+        self._render_preview()
+
+    def _compare_previous(self):
         record = self._selected_row()
-        if not record or not record.get("preview_path"):
-            messagebox.showinfo("境界画像なし", "加工済みの履歴を選択してください。", parent=self)
+        if (not record or record["id"] != self.compare_result or
+                not self.compare_job or self.compare_job not in self.rows_by_id):
+            messagebox.showinfo("比較画像なし", "直近の再加工結果を履歴から選択してください。", parent=self)
             return
-        folder = Path(record["preview_path"]).parent
-        diagnostic = folder / "trim_boundary_overlay.png"
-        if not diagnostic.is_file():
-            diagnostic = folder / "boundary_overlay.png"
-        if not diagnostic.is_file():
-            messagebox.showinfo("境界画像なし", "このジョブには検出境界画像がありません。", parent=self)
-            return
-        try:
-            if os.name != "nt":
-                raise OSError("画像ビューアー起動はWindowsのみ")
-            os.startfile(str(diagnostic))  # type: ignore[attr-defined]
-        except OSError as exc:
-            messagebox.showerror("開けません", str(exc), parent=self)
+        self.preview_mode = "processed" if self.preview_mode == "compare" else "compare"
+        self.preview_cache_key = None
+        self._render_preview()
 
     def _reprocess_selected(self):
-        if self._update_active():
-            return
         """Manual-only preview from the stored original; never invoke a printer."""
-        if ((self.worker and self.worker.is_alive()) or
-                (self.manual_worker and self.manual_worker.is_alive()) or
+        if self._update_active() or self.pending_exit or self.reprocess_after_stop:
+            return
+        if self.worker and self.worker.is_alive():
+            record = self._selected_row()
+            if not record or self.monitor_armed or self.stop_event.is_set():
+                return
+            if not messagebox.askyesno("監視を停止して再加工",
+                    "印刷OFFの監視を停止して選択原稿を再加工します。停止中の新着は自動処理されません。再開は手動です。続けますか？", parent=self):
+                return
+            if self.pending_exit or self._update_active() or self.monitor_armed or self.stop_event.is_set():
+                return
+            self.reprocess_after_stop = record["id"]
+            self._stop()
+            self._sync_gate_controls()
+            self.after(100, self._finish_reprocess_stop)
+            return
+        if ((self.manual_worker and self.manual_worker.is_alive()) or
                 (self.reprocess_worker and self.reprocess_worker.is_alive()) or
                 self.gate.waiting_for_paper):
             messagebox.showinfo("処理中", "監視・試し刷りを停止してから再加工してください。", parent=self)
@@ -572,6 +661,9 @@ class OperatorApp(tk.Tk):
             return
         # Reprocessing changes the preview, invalidating ANY prior paper test.
         self.gate.manual_failed()
+        self.compare_job = record["id"]
+        self.compare_result = None
+        self.preview_mode = "processed"
         self._log(f"印刷せず再加工します：回転{rotation}度、A4 {mode}、内側カット{trim}mm")
         self.status.set("選択した原稿を再加工中（印刷OFF）")
         self.reprocess_worker = threading.Thread(
@@ -579,6 +671,23 @@ class OperatorApp(tk.Tk):
             daemon=True)
         self.reprocess_worker.start()
         self._sync_gate_controls()
+
+    def _finish_reprocess_stop(self):
+        if self.pending_exit or not self.reprocess_after_stop:
+            self.reprocess_after_stop = None
+            return
+        if self.worker and self.worker.is_alive():
+            self.after(100, self._finish_reprocess_stop)
+            return
+        job_id = self.reprocess_after_stop
+        self.reprocess_after_stop = None
+        self._refresh_history()
+        self._sync_gate_controls()
+        if job_id in self.rows_by_id:
+            self.tree.selection_set(job_id)
+            self._reprocess_selected()
+        else:
+            self._log("監視を停止しました。履歴から再加工する原稿を選択してください。")
 
     def _run_reprocess(self, source, output, rotation, dpi, mode, trim):
         try:
@@ -698,7 +807,7 @@ class OperatorApp(tk.Tk):
         self._sync_gate_controls()
 
     def _start(self):
-        if self._update_active():
+        if self._update_active() or self.reprocess_after_stop or self.pending_exit:
             return
         if (self.worker and self.worker.is_alive()) or (self.reprocess_worker and self.reprocess_worker.is_alive()):
             return
@@ -730,6 +839,7 @@ class OperatorApp(tk.Tk):
         self.arm_button.configure(state="disabled")
         self.disarm_button.configure(state="disabled")
         self.status.set("監視を開始しています" + ("（自動印刷ON）" if armed else "（印刷OFF）"))
+        self.monitor_armed = armed
         self.worker = threading.Thread(
             target=self._run_monitor,
             args=(inbox, output, rotation, dpi, mode, trim, printer, armed,
@@ -737,6 +847,7 @@ class OperatorApp(tk.Tk):
             daemon=True,
         )
         self.worker.start()
+        self._sync_gate_controls()
 
     def _run_monitor(self, inbox, output, rotation, dpi, mode, trim, printer, armed,
                      recycle, stop):
@@ -840,6 +951,7 @@ class OperatorApp(tk.Tk):
                     self._log("監視エラー： " + str(value))
                     self.gate.disarm()
                 elif typ == "stopped":
+                    self.monitor_armed = False
                     self.status.set("停止中・自動印刷" + ("ON" if self.gate.armed else "OFF"))
                     self.start_button.configure(state="normal")
                     self.stop_button.configure(state="disabled")
@@ -848,8 +960,10 @@ class OperatorApp(tk.Tk):
                     result, job_id = value
                     self._refresh_history()
                     if job_id in self.rows_by_id:
+                        self.compare_result = job_id
                         self.tree.selection_set(job_id)
                         self.tree.see(job_id)
+                        self._open_selected()
                     self.status.set("再加工完了（印刷OFF）" if result == "READY_REVIEW" else
                                     "再加工を保留（印刷OFF）")
                     self._log(f"再加工：{result}。新しい履歴に保存しました。印刷は行っていません。")
@@ -900,6 +1014,7 @@ class OperatorApp(tk.Tk):
 
     def _close(self):
         self.pending_exit = True
+        self.reprocess_after_stop = None
         self.gate.disarm()
         self.stop_event.set()
         if not (self.worker and self.worker.is_alive()) \
