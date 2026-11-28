@@ -14,7 +14,7 @@ import queue
 import sqlite3
 import threading
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 from PIL import Image, ImageTk
 
 from m2_monitor import InboxMonitor, JobStore, ScanPipeline, SingleInstance, _paths_safe
@@ -398,6 +398,8 @@ class OperatorApp(tk.Tk):
                 hint = "④ 自動印刷の監視中です。変更・試し刷りは「監視を停止」してから。"
             else:
                 hint = "印刷OFFで監視中です。①試し刷りをするには先に「監視を停止」。"
+        elif self.reprocess_after_stop:
+            hint = "監視を停止しました。再加工するカット量を指定してください。"
         elif manual_busy:
             hint = "① 試し刷りを送信中です。実際に紙が出たら②で確認してください。"
         elif reprocess_busy:
@@ -577,7 +579,11 @@ class OperatorApp(tk.Tk):
                     path = folder / "boundary_overlay.png"
         canvas = self.preview_canvas
         width, height = max(1, canvas.winfo_width()), max(1, canvas.winfo_height())
-        key = (str(path), self.preview_mode, width, height)
+        try:
+            modified = path.stat().st_mtime_ns if path else None
+        except OSError:
+            modified = None
+        key = (str(path), modified, self.preview_mode, width, height)
         if key == self.preview_cache_key:
             return
         self.preview_cache_key = key
@@ -680,14 +686,29 @@ class OperatorApp(tk.Tk):
             self.after(100, self._finish_reprocess_stop)
             return
         job_id = self.reprocess_after_stop
-        self.reprocess_after_stop = None
         self._refresh_history()
-        self._sync_gate_controls()
-        if job_id in self.rows_by_id:
-            self.tree.selection_set(job_id)
-            self._reprocess_selected()
-        else:
+        if job_id not in self.rows_by_id:
+            self.reprocess_after_stop = None
+            self._sync_gate_controls()
             self._log("監視を停止しました。履歴から再加工する原稿を選択してください。")
+            return
+        # Keep print and update controls locked while the modal runs.
+        trim = simpledialog.askstring("内側カット量",
+                "再加工する内側カット量（0 / 1 / 2 / 3 / 5 mm）",
+                initialvalue=self.trim_mm.get(), parent=self)
+        self.reprocess_after_stop = None
+        if self.pending_exit:
+            return
+        self._sync_gate_controls()
+        if trim is None:
+            self._log("監視停止後の再加工を取り消しました。監視は停止中です。")
+            return
+        if trim.strip() not in ("0", "1", "2", "3", "5"):
+            messagebox.showinfo("カット量", "0・1・2・3・5mmから選択してください。監視は停止中です。", parent=self)
+            return
+        self.trim_mm.set(trim.strip())
+        self.tree.selection_set(job_id)
+        self._reprocess_selected()
 
     def _run_reprocess(self, source, output, rotation, dpi, mode, trim):
         try:
@@ -699,7 +720,7 @@ class OperatorApp(tk.Tk):
             self.notifications.put(("reprocess_error", f"{type(exc).__name__}: {exc}"))
 
     def _manual_test(self):
-        if self._update_active():
+        if self._update_active() or self.reprocess_after_stop or self.pending_exit:
             return
         if (self.worker and self.worker.is_alive()) or (self.reprocess_worker and self.reprocess_worker.is_alive()):
             messagebox.showerror("処理中", "監視・再加工を停止してから試し刷りしてください。", parent=self)
@@ -760,7 +781,7 @@ class OperatorApp(tk.Tk):
         self._sync_gate_controls()
 
     def _arm(self):
-        if self._update_active():
+        if self._update_active() or self.reprocess_after_stop or self.pending_exit:
             return
         if ((self.worker and self.worker.is_alive()) or
                 (self.reprocess_worker and self.reprocess_worker.is_alive()) or
@@ -951,7 +972,6 @@ class OperatorApp(tk.Tk):
                     self._log("監視エラー： " + str(value))
                     self.gate.disarm()
                 elif typ == "stopped":
-                    self.monitor_armed = False
                     self.status.set("停止中・自動印刷" + ("ON" if self.gate.armed else "OFF"))
                     self.start_button.configure(state="normal")
                     self.stop_button.configure(state="disabled")
