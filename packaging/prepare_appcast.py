@@ -80,6 +80,8 @@ def main(argv=None):
     p.add_argument("--installer", type=Path, required=True)
     p.add_argument("--tool", type=Path, required=True)
     p.add_argument("--private-key", type=Path, required=True)
+    p.add_argument("--public-key", required=True,
+                   help="Exact public key embedded in the managed build")
     p.add_argument("--previous-build", required=True,
                    help="Last distributed build number; 0 only if none")
     p.add_argument("--output", type=Path, required=True,
@@ -90,6 +92,9 @@ def main(argv=None):
         installer = args.installer.resolve(strict=True)
         tool = args.tool.resolve(strict=True)
         key = args.private_key.resolve(strict=True)
+        if not re.fullmatch(r"[A-Za-z0-9+/]{43}=", args.public_key) or len(
+                base64.b64decode(args.public_key, validate=True)) != 32:
+            raise ValueError("Invalid embedded public key")
         if not key.is_file() or key.is_relative_to(ROOT):
             raise ValueError("Private key must be outside the repository")
         if not tool.is_file() or tool.name.lower() != "winsparkle-tool.exe":
@@ -106,10 +111,18 @@ def main(argv=None):
         if proc.returncode != 0:
             raise ValueError("WinSparkle signing failed; inspect locally")
         signature = proc.stdout.strip()
-        if fingerprint(installer) != (size, digest):
-            raise ValueError("Installer changed during signing")
         xml = candidate_xml(version, build, args.previous_build,
                             installer.name, size, signature)
+        # The official verifier must accept the exact embedded public key.
+        # A wrong private key cannot produce a feed candidate.
+        verified = subprocess.run(
+            [str(tool), "verify", "--public-key", args.public_key,
+             "--signature", signature, str(installer)],
+            capture_output=True, text=True, timeout=120, check=False)
+        if verified.returncode != 0:
+            raise ValueError("Signature verification failed")
+        if fingerprint(installer) != (size, digest):
+            raise ValueError("Installer changed during signing or verification")
         with args.output.open("xb") as stream:
             stream.write(xml)
         print(f"Candidate only: v{version} / build {build}")
