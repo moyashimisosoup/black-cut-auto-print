@@ -4,7 +4,7 @@ Bump APP_VERSION for every distributed EXE candidate. Do not silently reuse a
 version string across different deliverables. This is not a hardware approval.
 """
 
-APP_VERSION = "0.7.2-rc.1"
+APP_VERSION = "0.7.4-rc.1"
 APP_ID = "APP-033"
 
 

@@ -7,6 +7,6 @@ from version_info import APP_ID, APP_VERSION, version_label, window_title
 
 def test_version_title_has_release_identifier():
     assert APP_ID == "APP-033"
-    assert APP_VERSION == "0.7.2-rc.1"
-    assert version_label() == "v0.7.2-rc.1"
-    assert window_title() == "黒カット印刷 v0.7.2-rc.1 | APP-033"
+    assert APP_VERSION == "0.7.4-rc.1"
+    assert version_label() == "v0.7.4-rc.1"
+    assert window_title() == "黒カット印刷 v0.7.4-rc.1 | APP-033"
